@@ -39,7 +39,6 @@
         left: 0;
         outline: none;
         background: #000;
-        cursor: default;
       }
 
       #launcher-ui {
@@ -52,7 +51,7 @@
         align-items: center;
         justify-content: center;
         padding: 2rem;
-        transition: opacity 0.4s ease-out;
+        transition: opacity 0.35s ease-out;
       }
 
       #launcher-ui::before {
@@ -311,6 +310,40 @@
     </div>
 
     <script type="text/javascript">
+      // Global pointer lock interceptor to prevent browser rate-limit crashes
+      (function() {
+        const originalRequestPointerLock = Element.prototype.requestPointerLock;
+        let lastLockTime = 0;
+
+        Element.prototype.requestPointerLock = function() {
+          const now = performance.now();
+          if (document.pointerLockElement === this) {
+            return Promise.resolve();
+          }
+          if (now - lastLockTime < 1000) {
+            return Promise.resolve();
+          }
+          lastLockTime = now;
+          try {
+            const ret = originalRequestPointerLock.apply(this, arguments);
+            if (ret && typeof ret.catch === 'function') {
+              return ret.catch(() => {});
+            }
+            return ret || Promise.resolve();
+          } catch (e) {
+            return Promise.resolve();
+          }
+        };
+
+        window.addEventListener('unhandledrejection', function(event) {
+          if (event.reason && (event.reason.name === 'NotAllowedError' || event.reason.name === 'SecurityError')) {
+            if (String(event.reason.message).includes('pointer lock') || String(event.reason.message).includes('requestPointerLock')) {
+              event.preventDefault();
+            }
+          }
+        });
+      })();
+
       window.spinnerElement = document.createElement('div');
       window.statusElement = document.createElement('div');
       window.progressElement = document.createElement('progress');
@@ -347,7 +380,6 @@
       let g_downloaded = 0;
       let g_launched = false;
       let g_engineInitialized = false;
-      let g_inMenu = true;
 
       function dismissLauncher() {
         if (g_engineInitialized) return;
@@ -372,36 +404,6 @@
 
       document.addEventListener('pointerlockchange', updateCursorState);
 
-      canvasElement.addEventListener('mousedown', () => {
-        canvasElement.focus();
-        if (g_inMenu) return;
-
-        if (g_engineInitialized && document.pointerLockElement !== canvasElement) {
-          try {
-            canvasElement.requestPointerLock();
-          } catch(err) {}
-        }
-      });
-
-      window.addEventListener('keydown', (e) => {
-        if (e.code === 'Escape' || e.key === 'Escape') {
-          g_inMenu = !g_inMenu;
-          if (document.pointerLockElement) {
-            document.exitPointerLock();
-          }
-          canvasElement.style.cursor = 'default';
-          document.body.style.cursor = 'default';
-        }
-      });
-
-      ['mousemove', 'mousedown', 'mouseup', 'click'].forEach(eventType => {
-        canvasElement.addEventListener(eventType, () => {
-          if (document.pointerLockElement !== canvasElement && document.activeElement !== canvasElement) {
-            canvasElement.focus();
-          }
-        }, { passive: true });
-      });
-
       function updateUI(status, file, bytesAdded) {
         if (status) txtStatus.textContent = status;
         if (file) txtFile.textContent = file;
@@ -422,8 +424,19 @@
         canvasElement.style.cursor = 'default';
       }
 
-      window.onerror = (m, u, l, c, e) => showCrash(e || m);
-      window.onunhandledrejection = (e) => showCrash(e.reason);
+      window.onerror = (m, u, l, c, e) => {
+        if (typeof m === 'string' && (m.includes('pointer lock') || m.includes('requestPointerLock'))) {
+          return true;
+        }
+        showCrash(e || m);
+      };
+
+      window.onunhandledrejection = (e) => {
+        if (e.reason && (e.reason.name === 'NotAllowedError' || e.reason.name === 'SecurityError')) {
+          return;
+        }
+        showCrash(e.reason);
+      };
 
       var g_pendingResize = null;
       window.addEventListener('resize', () => {
@@ -577,13 +590,6 @@
         },
         print: function(text) {
           console.log(text);
-          if (text.includes('Game initializing') || text.includes('Host_Init') || text.includes('Map: background01')) {
-            g_inMenu = true;
-          }
-          if (text.includes('Map: d1_trainstation_01') || text.includes('Signon traffic') || text.includes('Setting up full update')) {
-            g_inMenu = false;
-          }
-          // Dismiss launcher on device creation, shader/material load, or map startup
           if (
             text.includes('Cache materials') ||
             text.includes('IDirect3DDevice9::Create') ||
@@ -597,11 +603,10 @@
         },
         printErr: function(text) {
           console.error(text);
-          // Dismiss launcher if engine is already processing shaders despite warnings
           if (text.includes('Cache materials') || text.includes('IDirect3DDevice9::Create')) {
             dismissLauncher();
           }
-          if (/crash|fatal error|exception/i.test(text) && !/assertion failed|GL_INVALID/i.test(text)) {
+          if (/crash|fatal error|exception/i.test(text) && !/assertion failed|GL_INVALID|pointer lock|requestPointerLock/i.test(text)) {
             showCrash(text);
           }
         },
@@ -610,7 +615,6 @@
             Module._JSRequestResize(g_pendingResize[0], g_pendingResize[1]);
             window.g_pendingResize = null;
           }
-          // Fallback trigger once WASM and workers are live
           setTimeout(dismissLauncher, 3000);
         },
         preRun: [
@@ -629,7 +633,6 @@
               };
             }
 
-            // Continuous watchdog to ensure launcher dismisses once files mount
             const watchdog = setInterval(() => {
               if (typeof FS !== 'undefined') {
                 try {
