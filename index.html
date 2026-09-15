@@ -1,194 +1,685 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, minimum-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Half-Life 2</title>
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, minimum-scale=1, maximum-scale=1, user-scalable=no">
+    <title>HALF-LIFE 2 // WEB</title>
 
-  <!-- Enables SharedArrayBuffer on GitHub Pages without server-side config -->
-  <script src="coi-serviceworker.js"></script>
+    <!-- First element in head: COOP/COEP Service Worker for GitHub Pages isolation -->
+    <script src="coi-serviceworker.js"></script>
 
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      background-color: #0b0c10;
-      overflow: hidden;
-      color: #c5c6c7;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-    #canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-      border: 0;
-      outline: none;
-    }
-    #status-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: radial-gradient(circle at center, #1f2833 0%, #0b0c10 100%);
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      z-index: 10;
-      padding: 24px;
-      box-sizing: border-box;
-      text-align: center;
-    }
-    .hud-card {
-      background: rgba(15, 20, 28, 0.9);
-      border: 1px solid rgba(255, 153, 0, 0.4);
-      box-shadow: 0 0 30px rgba(255, 153, 0, 0.2), inset 0 0 15px rgba(0, 0, 0, 0.6);
-      border-radius: 12px;
-      padding: 30px 40px;
-      width: 90%;
-      max-width: 520px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    .hud-title {
-      color: #ff9900;
-      font-size: 22px;
-      font-weight: 700;
-      letter-spacing: 2px;
-      margin-bottom: 6px;
-      text-transform: uppercase;
-      text-shadow: 0 0 10px rgba(255, 153, 0, 0.6);
-    }
-    .hud-sub {
-      color: #8892b0;
-      font-size: 13px;
-      margin-bottom: 20px;
-      letter-spacing: 1px;
-    }
-    #status {
-      font-size: 13px;
-      color: #66fcf1;
-      font-family: 'Courier New', Courier, monospace;
-      margin-bottom: 14px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      width: 100%;
-    }
-    #progress-wrapper {
-      width: 100%;
-      margin-bottom: 12px;
-    }
-    progress#progress {
-      width: 100%;
-      height: 14px;
-      accent-color: #ff9900;
-      border-radius: 7px;
-      overflow: hidden;
-    }
-    #percent-text {
-      font-size: 14px;
-      color: #ff9900;
-      font-family: 'Courier New', Courier, monospace;
-      font-weight: bold;
-    }
-    .hidden {
-      display: none !important;
-    }
-  </style>
-</head>
-
-<body>
-  <div id="status-overlay">
-    <div class="hud-card">
-      <div class="hud-title">City 17 System Loader</div>
-      <div class="hud-sub">Source Engine WebAssembly Core</div>
-      <div id="status">Initializing engine components...</div>
-      <div id="progress-wrapper">
-        <progress id="progress" value="0" max="100"></progress>
-      </div>
-      <div id="percent-text">0%</div>
-    </div>
-  </div>
-
-  <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
-  <div id="spinner" style="display:none"></div>
-
-  <script>
-    // Globals expected by hl2_launcher.js
-    const canvasElement = document.getElementById('canvas');
-    const spinnerElement = document.getElementById('spinner');
-    const statusElement = document.getElementById('status');
-    const progressElement = document.getElementById('progress');
-
-    window.canvasElement = canvasElement;
-    window.spinnerElement = spinnerElement;
-    window.statusElement = statusElement;
-    window.progressElement = progressElement;
-    window.canvas = canvasElement;
-
-    const statusOverlay = document.getElementById('status-overlay');
-    const percentText = document.getElementById('percent-text');
-
-    function updateProgressUI(message, fraction) {
-      if (message && statusElement) statusElement.textContent = message;
-      if (typeof fraction === 'number' && !isNaN(fraction)) {
-        const val = Math.min(Math.max(fraction * 100, 0), 100);
-        if (progressElement) progressElement.value = val;
-        if (percentText) percentText.textContent = Math.round(val) + '%';
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        user-select: none;
+        -webkit-user-select: none;
       }
-    }
 
-    function hideStatus() {
-      if (statusOverlay) statusOverlay.classList.add('hidden');
-    }
+      @font-face {
+        font-family: 'LambdaMono';
+        src: local('Consolas'), local('Lucida Console'), local('Courier New'), monospace;
+      }
 
-    window.Module = {
-      canvas: canvasElement,
-      canvasElement: canvasElement,
-      spinnerElement: spinnerElement,
-      statusElement: statusElement,
-      progressElement: progressElement,
-      setStatus: function(text) {
-        if (!text) {
-          updateProgressUI('All assets ready. Starting engine...', 1);
-          setTimeout(hideStatus, 600);
+      html, body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background-color: #0b0c0e;
+        color: #d8dde3;
+        font-family: 'LambdaMono', -apple-system, monospace;
+      }
+
+      #canvas {
+        width: 100vw;
+        height: 100vh;
+        display: block;
+        position: absolute;
+        top: 0;
+        left: 0;
+        outline: none;
+        background: #000;
+        cursor: default;
+      }
+
+      #launcher-ui {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        background: radial-gradient(circle at 50% 45%, #1c1815 0%, #0d0c0a 70%, #050504 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+      }
+
+      #launcher-ui::before {
+        content: " ";
+        display: block;
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+        background-size: 100% 4px;
+        z-index: 51;
+        pointer-events: none;
+        opacity: 0.6;
+      }
+
+      #launcher-ui.hidden {
+        display: none !important;
+      }
+
+      .terminal-frame {
+        position: relative;
+        z-index: 52;
+        background: rgba(18, 17, 16, 0.95);
+        border: 1px solid #332d28;
+        border-top: 3px solid #ff7b00;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9), 0 0 30px rgba(255, 123, 0, 0.12);
+        width: 100%;
+        max-width: 580px;
+        padding: 2.2rem;
+      }
+
+      .header-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px dashed #2d2621;
+        padding-bottom: 0.8rem;
+        margin-bottom: 1.5rem;
+        font-size: 0.72rem;
+        letter-spacing: 0.15em;
+        color: #8c827a;
+      }
+
+      .header-meta .tag-id {
+        color: #ff7b00;
+        font-weight: 700;
+      }
+
+      .brand-row {
+        display: flex;
+        align-items: baseline;
+        gap: 14px;
+        margin-bottom: 0.4rem;
+      }
+
+      .brand-title {
+        font-size: 2.1rem;
+        font-weight: 900;
+        letter-spacing: 0.18em;
+        color: #f7ede2;
+        text-transform: uppercase;
+        text-shadow: 0 0 16px rgba(255, 123, 0, 0.35);
+      }
+
+      .brand-sub {
+        font-size: 0.75rem;
+        color: #ffa200;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+
+      .log-console {
+        background: #080706;
+        border: 1px solid #1f1b18;
+        padding: 0.9rem 1.1rem;
+        margin: 1.4rem 0;
+        font-size: 0.78rem;
+        line-height: 1.6;
+        color: #8c827a;
+      }
+
+      .log-console .log-entry {
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .log-console .log-entry span {
+        color: #ff7b00;
+      }
+
+      .btn-terminal {
+        width: 100%;
+        background: #ff7b00;
+        color: #120e0a;
+        border: 1px solid #ff7b00;
+        padding: 1rem;
+        font-family: inherit;
+        font-size: 0.88rem;
+        font-weight: 800;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: all 0.15s ease-out;
+      }
+
+      .btn-terminal:hover:not(:disabled) {
+        background: #ffa200;
+        border-color: #ffa200;
+        box-shadow: 0 0 20px rgba(255, 162, 0, 0.4);
+      }
+
+      .btn-terminal:disabled {
+        background: #1a1715;
+        border-color: #2b2520;
+        color: #595048;
+        cursor: not-allowed;
+      }
+
+      #progress-box {
+        display: none;
+        margin-top: 1.4rem;
+      }
+
+      .meter-labels {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.74rem;
+        color: #8c827a;
+        margin-bottom: 0.4rem;
+        letter-spacing: 0.08em;
+      }
+
+      .meter-labels #txt-pct {
+        color: #ff7b00;
+        font-weight: bold;
+      }
+
+      .meter-rail {
+        width: 100%;
+        height: 8px;
+        background: #080706;
+        border: 1px solid #2b2520;
+        overflow: hidden;
+      }
+
+      .meter-fill {
+        width: 0%;
+        height: 100%;
+        background: linear-gradient(90deg, #d45b00, #ff7b00);
+        box-shadow: 0 0 10px rgba(255, 123, 0, 0.5);
+        transition: width 0.08s linear;
+      }
+
+      .meter-sub {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.68rem;
+        color: #595048;
+        margin-top: 0.45rem;
+      }
+
+      #crash-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        background: rgba(8, 7, 6, 0.95);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+      }
+
+      #crash-overlay.active {
+        display: flex !important;
+      }
+
+      .crash-card {
+        background: #141210;
+        border: 1px solid #e63946;
+        max-width: 680px;
+        width: 100%;
+        padding: 1.8rem;
+        box-shadow: 0 0 40px rgba(230, 57, 70, 0.2);
+      }
+
+      .crash-title {
+        color: #e63946;
+        font-size: 0.88rem;
+        font-weight: bold;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        margin-bottom: 0.8rem;
+      }
+
+      .crash-pre {
+        background: #080706;
+        color: #ff858d;
+        font-size: 0.75rem;
+        padding: 1rem;
+        max-height: 260px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        border: 1px solid #2b2520;
+        margin-bottom: 1.2rem;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+
+    <div id="launcher-ui">
+      <div class="terminal-frame">
+        <div class="header-meta">
+          <span>CITY 17 SECTOR-4 TERMINAL</span>
+          <span class="tag-id">LAMBDA // WASM</span>
+        </div>
+
+        <div class="brand-row">
+          <div class="brand-title">HALF-LIFE 2</div>
+          <div class="brand-sub">SRC-V1.0</div>
+        </div>
+
+        <div class="log-console">
+          <div class="log-entry">> <span>SYS</span>: GITHUB PAGES HOSTING DETECTED</div>
+          <div class="log-entry">> <span>STORAGE</span>: STITCHING MULTI-PART CHUNKS</div>
+          <div class="log-entry">> <span>TARGET</span>: D1_TRAINSTATION_01.BSP</div>
+        </div>
+
+        <button id="btn-start" class="btn-terminal" onclick="startApp()" disabled>AWAITING ISOLATION...</button>
+
+        <div id="progress-box">
+          <div class="meter-labels">
+            <span id="txt-status">STREAMING ASSETS</span>
+            <span id="txt-pct">0%</span>
+          </div>
+          <div class="meter-rail">
+            <div id="bar-fill" class="meter-fill"></div>
+          </div>
+          <div class="meter-sub">
+            <span id="txt-file">Initializing chunk pipeline...</span>
+            <span id="txt-bytes">0 MB / 450 MB</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="crash-overlay">
+      <div class="crash-card">
+        <div class="crash-title">ENGINE INTERCEPT FAULT</div>
+        <pre id="crash-log" class="crash-pre"></pre>
+        <button class="btn-terminal" onclick="location.reload()">RE-INITIALIZE CONTAINER</button>
+      </div>
+    </div>
+
+    <script type="text/javascript">
+      // Exact chunk parts mapped from your repository chunks folder
+      const SPLIT_FILES = {
+        'hl2_sound_vo_english.data': 5,
+        'background01.data': 5,
+        'd1_canals_01.data': 2,
+        'd1_canals_01a.data': 2,
+        'd1_canals_07.data': 2,
+        'd1_canals_11.data': 2,
+        'd1_eli_01.data': 2,
+        'd1_trainstation_01.data': 3,
+        'd1_trainstation_02.data': 2,
+        'd1_trainstation_03.data': 2,
+        'd1_trainstation_04.data': 2,
+        'd1_trainstation_05.data': 5,
+        'd2_coast_03.data': 2,
+        'd2_coast_09.data': 2
+      };
+
+      const canvasElement = document.getElementById('canvas');
+      const launcherUi = document.getElementById('launcher-ui');
+      const btnStart = document.getElementById('btn-start');
+      const progressBox = document.getElementById('progress-box');
+      const txtStatus = document.getElementById('txt-status');
+      const txtPct = document.getElementById('txt-pct');
+      const barFill = document.getElementById('bar-fill');
+      const txtFile = document.getElementById('txt-file');
+      const txtBytes = document.getElementById('txt-bytes');
+      const crashOverlay = document.getElementById('crash-overlay');
+      const crashLog = document.getElementById('crash-log');
+
+      let g_totalExpected = 450 * 1024 * 1024;
+      let g_downloaded = 0;
+      let g_launched = false;
+      let g_engineInitialized = false;
+
+      // Pointer Lock & Cursor Restoration Fix
+      document.addEventListener('pointerlockchange', () => {
+        if (document.pointerLockElement !== canvasElement) {
+          canvasElement.style.cursor = 'default';
+          document.body.style.cursor = 'default';
+        } else {
+          canvasElement.style.cursor = 'none';
+        }
+      });
+
+      function requestEngineLock() {
+        if (!g_engineInitialized) return;
+        if (document.pointerLockElement === canvasElement) return;
+
+        try {
+          const promise = canvasElement.requestPointerLock();
+          if (promise && typeof promise.catch === 'function') {
+            promise.catch(() => {});
+          }
+        } catch(e) {}
+      }
+
+      canvasElement.addEventListener('click', requestEngineLock);
+
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'Escape' || e.key === 'Escape') {
+          if (document.pointerLockElement) {
+            document.exitPointerLock();
+          }
+          canvasElement.style.cursor = 'default';
+          document.body.style.cursor = 'default';
+        }
+      });
+
+      function checkIsolation() {
+        if (window.crossOriginIsolated) {
+          btnStart.disabled = false;
+          btnStart.textContent = 'START ENGINE';
+        } else {
+          btnStart.disabled = true;
+          btnStart.textContent = 'AWAITING ISOLATION...';
+          if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+            window.location.reload();
+          }
+        }
+      }
+
+      window.addEventListener('load', () => {
+        checkIsolation();
+        setTimeout(checkIsolation, 1000);
+      });
+
+      function updateUI(status, file, bytesAdded) {
+        if (status) txtStatus.textContent = status;
+        if (file) txtFile.textContent = file;
+        if (bytesAdded) g_downloaded += bytesAdded;
+
+        const dlMB = (g_downloaded / (1024 * 1024)).toFixed(1);
+        const totMB = (g_totalExpected / (1024 * 1024)).toFixed(1);
+        txtBytes.textContent = `${dlMB} MB / ${totMB} MB`;
+
+        const pct = Math.min(99, Math.round((g_downloaded / g_totalExpected) * 100));
+        txtPct.textContent = `${pct}%`;
+        barFill.style.width = `${pct}%`;
+      }
+
+      function showCrash(err) {
+        crashLog.textContent = (err && err.stack) ? err.stack : (typeof err === 'string' ? err : JSON.stringify(err));
+        crashOverlay.classList.add('active');
+        canvasElement.style.cursor = 'default';
+      }
+
+      window.onerror = (m, u, l, c, e) => showCrash(e || m);
+      window.onunhandledrejection = (e) => showCrash(e.reason);
+
+      var g_pendingResize = null;
+      window.addEventListener('resize', () => {
+        const w = window.innerWidth, h = window.innerHeight;
+        g_pendingResize = [w, h];
+        if (window.Module && Module._JSRequestResize) {
+          Module._JSRequestResize(w, h);
+          g_pendingResize = null;
+        }
+      });
+
+      // Local Chunk Stitching Pipeline
+      async function fetchPart(baseName, partIdx) {
+        const pad4 = String(partIdx).padStart(4, '0');
+        const paths = [
+          `chunks/${baseName}.part${pad4}`,
+          `${baseName}.part${pad4}`
+        ];
+
+        for (const p of paths) {
+          try {
+            const res = await origFetch(p);
+            if (res.ok) {
+              const buf = await res.arrayBuffer();
+              updateUI(undefined, `${baseName} (.part${pad4})`, buf.byteLength);
+              return buf;
+            }
+          } catch(e) {}
+        }
+        throw new Error(`Failed to locate chunk: ${baseName}.part${pad4}`);
+      }
+
+      const g_chunkAssembly = {};
+      async function assembleSplit(splitInfo) {
+        const { baseName, totalParts } = splitInfo;
+        if (g_chunkAssembly[baseName]) return g_chunkAssembly[baseName];
+
+        g_chunkAssembly[baseName] = (async () => {
+          const buffers = [];
+          let totalLen = 0;
+          for (let i = 1; i <= totalParts; i++) {
+            updateUI('ASSEMBLING', `${baseName} (${i}/${totalParts})`);
+            const b = await fetchPart(baseName, i);
+            buffers.push(b);
+            totalLen += b.byteLength;
+          }
+
+          const combined = new Uint8Array(totalLen);
+          let offset = 0;
+          for (let i = 0; i < buffers.length; i++) {
+            combined.set(new Uint8Array(buffers[i]), offset);
+            offset += buffers[i].byteLength;
+            buffers[i] = null;
+          }
+          buffers.length = 0;
+          return combined.buffer;
+        })();
+
+        return g_chunkAssembly[baseName];
+      }
+
+      function getSplitTarget(url) {
+        if (!url) return null;
+        for (const [baseName, totalParts] of Object.entries(SPLIT_FILES)) {
+          if (url.includes(baseName)) return { baseName, totalParts };
+        }
+        return null;
+      }
+
+      const origFetch = window.fetch.bind(window);
+      window.fetch = async function(input, init) {
+        const url = (typeof input === 'string') ? input : (input && input.url) ? input.url : '';
+        if (url.includes('save_console_log')) {
+          return new Response('{"ok":true}', { status: 200, statusText: 'OK' });
+        }
+
+        const split = getSplitTarget(url);
+        if (split) {
+          try {
+            const assembled = await assembleSplit(split);
+            return new Response(assembled, { status: 200, statusText: 'OK' });
+          } catch(e) {
+            return new Response(new ArrayBuffer(0), { status: 200, statusText: 'OK' });
+          }
+        }
+        return origFetch(input, init);
+      };
+
+      const OrigXHR = window.XMLHttpRequest;
+      window.XMLHttpRequest = function() {
+        const xhr = new OrigXHR();
+        let targetUrl = '';
+
+        const origOpen = xhr.open;
+        xhr.open = function(method, url, ...rest) {
+          targetUrl = url;
+          return origOpen.call(this, method, url, ...rest);
+        };
+
+        const origSend = xhr.send;
+        xhr.send = function(body) {
+          const split = getSplitTarget(targetUrl);
+          if (split) {
+            assembleSplit(split).then(buffer => {
+              Object.defineProperty(xhr, 'status', { get: () => 200 });
+              Object.defineProperty(xhr, 'statusText', { get: () => 'OK' });
+              Object.defineProperty(xhr, 'readyState', { get: () => 4 });
+              Object.defineProperty(xhr, 'response', { get: () => buffer });
+              Object.defineProperty(xhr, 'responseText', { get: () => '' });
+
+              const evt = new ProgressEvent('load', { loaded: buffer.byteLength, total: buffer.byteLength, lengthComputable: true });
+              if (typeof xhr.onprogress === 'function') xhr.onprogress(evt);
+              if (typeof xhr.onreadystatechange === 'function') xhr.onreadystatechange(new Event('readystatechange'));
+              if (typeof xhr.onload === 'function') xhr.onload(evt);
+              else xhr.dispatchEvent(evt);
+              if (typeof xhr.onloadend === 'function') xhr.onloadend(new ProgressEvent('loadend'));
+            }).catch(e => {
+              if (typeof xhr.onerror === 'function') xhr.onerror(new ProgressEvent('error'));
+              xhr.dispatchEvent(new ProgressEvent('error'));
+            });
+            return;
+          }
+          return origSend.call(this, body);
+        };
+        return xhr;
+      };
+
+      var Module = {
+        canvas: canvasElement,
+        locateFile: (p) => p,
+        totalDependencies: 0,
+        setStatus: (text) => {
+          if (text) updateUI('INITIALIZING', text);
+        },
+        monitorRunDependencies: (left) => {
+          if (left > 0) updateUI('LINKING', `Mounting ${left} runtime modules...`);
+        },
+        print: function(text) {
+          console.log(text);
+          if (text.includes('Game initializing') || text.includes('Host_Init') || text.includes('Map: background01') || text.includes('Map: d1_trainstation_01')) {
+            txtPct.textContent = '100%';
+            barFill.style.width = '100%';
+            updateUI('READY', 'Sector Loaded');
+            setTimeout(() => {
+              launcherUi.classList.add('hidden');
+              g_engineInitialized = true;
+              canvasElement.focus();
+              requestEngineLock();
+            }, 500);
+          }
+        },
+        printErr: function(text) {
+          console.error(text);
+          if (/crash|abort|runtimeerror|fatal|exception|assertion failed/i.test(text)) {
+            showCrash(text);
+          }
+        },
+        onRuntimeInitialized: function() {
+          if (window.g_pendingResize && Module._JSRequestResize) {
+            Module._JSRequestResize(g_pendingResize[0], g_pendingResize[1]);
+            window.g_pendingResize = null;
+          }
+        },
+        preRun: [
+          function() {
+            const origRemove = Module.removeRunDependency;
+            if (typeof origRemove === 'function') {
+              Module.removeRunDependency = function(id) {
+                if (typeof runDependencyTracking !== 'undefined' && !runDependencyTracking[id]) return;
+                try { origRemove.call(Module, id); } catch(e) {}
+              };
+            }
+
+            const watchdog = setInterval(() => {
+              if (typeof FS !== 'undefined') {
+                try {
+                  const chk = FS.analyzePath('/hl2/maps/d1_trainstation_01.bsp');
+                  if (chk && chk.exists) {
+                    txtPct.textContent = '100%';
+                    barFill.style.width = '100%';
+                    updateUI('READY', 'Point Insertion Ready.');
+                    setTimeout(() => {
+                      launcherUi.classList.add('hidden');
+                      g_engineInitialized = true;
+                      canvasElement.focus();
+                      requestEngineLock();
+                    }, 1200);
+                    clearInterval(watchdog);
+                  }
+                } catch(e) {}
+              }
+            }, 1000);
+
+            setInterval(() => {
+              if (typeof runDependencyTracking !== 'undefined') {
+                for (const dep in runDependencyTracking) {
+                  if (dep === 'loadDylibs' || dep === 'load_game_data') {
+                    try { Module.removeRunDependency(dep); } catch(e) {}
+                  }
+                }
+              }
+            }, 3000);
+
+            if (typeof FS !== 'undefined') {
+              FS.syncfs = (p, cb) => {
+                const fn = (typeof p === 'function') ? p : cb;
+                if (fn) setTimeout(() => fn(null), 0);
+              };
+            }
+          }
+        ]
+      };
+
+      let _downloadMapHandler = null;
+      Object.defineProperty(Module, 'downloadMap', {
+        configurable: true,
+        enumerable: true,
+        get: () => _downloadMapHandler,
+        set: (origFn) => {
+          _downloadMapHandler = function(lock, mapName) {
+            function _release() {
+              try { Atomics.store(HEAP32, lock >> 2, 0); Atomics.notify(HEAP32, lock >> 2); } catch(e) {}
+              try { Atomics.store(HEAP32, lock, 0); Atomics.notify(HEAP32, lock); } catch(e) {}
+            }
+            window.audioLoaded = true;
+            if (window.dataLoader) {
+              window.dataLoader.loadMapWithDeps(mapName).then(_release).catch(_release);
+            } else if (typeof origFn === 'function') {
+              try { origFn(lock, mapName); } catch(e) { _release(); }
+            } else {
+              _release();
+            }
+          };
+        }
+      });
+
+      function startApp() {
+        if (!window.crossOriginIsolated) {
+          alert('SharedArrayBuffer isolation is not active yet. Reloading...');
+          window.location.reload();
           return;
         }
-        const match = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
-        if (match) {
-          const item = match[1].trim();
-          const current = parseFloat(match[2]);
-          const total = parseFloat(match[4]);
-          updateProgressUI(item, total > 0 ? current / total : 0);
-        } else {
-          updateProgressUI(text);
-        }
-      },
-      totalDependencies: 0,
-      monitorRunDependencies: function(left) {
-        this.totalDependencies = Math.max(this.totalDependencies, left);
-        if (left) {
-          const current = this.totalDependencies - left;
-          const ratio = this.totalDependencies > 0 ? current / this.totalDependencies : 0;
-          updateProgressUI(`Mounting packages (${current}/${this.totalDependencies})...`, ratio);
-        } else {
-          updateProgressUI('Starting Half-Life 2...', 0.99);
-        }
-      },
-      onAbort: function(reason) {
-        updateProgressUI('Engine halted: ' + (reason || 'Unknown error'));
-        if (statusElement) statusElement.style.color = '#ff4d4d';
-        if (percentText) percentText.textContent = 'ERR';
-      }
-    };
-  </script>
 
-  <!-- Load launcher after globals and Module are configured -->
-  <script async src="hl2_launcher.js"></script>
-</body>
+        if (g_launched) return;
+        g_launched = true;
+
+        btnStart.style.display = 'none';
+        progressBox.style.display = 'block';
+        updateUI('STARTING', 'Reading local hl2_launcher.js...');
+
+        if (typeof AL !== 'undefined' && AL.currentCtx && AL.currentCtx.audioCtx && AL.currentCtx.audioCtx.state === 'suspended') {
+          AL.currentCtx.audioCtx.resume();
+        }
+
+        // Targets your exact engine binary
+        const script = document.createElement('script');
+        script.type = 'text/javascript';
+        script.src = 'hl2_launcher.js';
+        script.onerror = (e) => showCrash('Failed loading hl2_launcher.js: ' + e);
+        document.body.appendChild(script);
+      }
+    </script>
+  </body>
 </html>
