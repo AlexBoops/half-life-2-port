@@ -262,10 +262,22 @@
         border: 1px solid #2b2520;
         margin-bottom: 1.2rem;
       }
+
+      /* Hidden dummy elements to satisfy native Emscripten setProgress hooks */
+      .emscripten-shims {
+        display: none !important;
+      }
     </style>
   </head>
   <body>
     <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+
+    <!-- Hidden compatibility shim elements for default Emscripten DOM access -->
+    <div class="emscripten-shims">
+      <div id="status"></div>
+      <progress id="progress" max="100" value="0"></progress>
+      <div id="spinner"></div>
+    </div>
 
     <div id="launcher-ui">
       <div class="terminal-frame">
@@ -280,7 +292,7 @@
         </div>
 
         <div class="log-console">
-          <div class="log-entry">> <span>STORAGE</span>: LOCAL REPOSITORY CHUNK ROUTER ONLINE</div>
+          <div class="log-entry">> <span>STORAGE</span>: LOCAL CHUNK ROUTER ACTIVE</div>
           <div class="log-entry">> <span>ISOLATION</span>: <span id="log-sab-status">CHECKING CREDENTIALLESS HEADERS...</span></div>
           <div class="log-entry">> <span>ENTRY_POINT</span>: D1_TRAINSTATION_01.BSP</div>
         </div>
@@ -347,7 +359,14 @@
       let g_launched = false;
       let g_engineInitialized = false;
 
-      // Pointer lock and cursor restore
+      // Safe setProgress bridge so hl2_launcher never throws a null exception
+      window.setProgress = function(val, total) {
+        if (!total) total = 100;
+        const pct = Math.min(100, Math.round((val / total) * 100));
+        txtPct.textContent = `${pct}%`;
+        barFill.style.width = `${pct}%`;
+      };
+
       document.addEventListener('pointerlockchange', () => {
         if (document.pointerLockElement !== canvasElement) {
           canvasElement.style.cursor = 'default';
@@ -381,18 +400,16 @@
         }
       });
 
-      // Anti-hang isolation resolver
       function checkIsolation() {
         if (window.crossOriginIsolated) {
           btnStart.disabled = false;
           btnStart.textContent = 'INITIALIZE SYSTEM';
-          logSabStatus.textContent = 'HARDWARE ISOLATION SECURED (PTHREADS)';
+          logSabStatus.textContent = 'HARDWARE ISOLATION ACTIVE';
           return true;
         }
         return false;
       }
 
-      // Check immediately
       if (!checkIsolation()) {
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.register('coi-serviceworker.js').then((reg) => {
@@ -410,12 +427,11 @@
           }).catch(() => {});
         }
 
-        // Fallback: If not isolated within 1.5s, bypass lock and enable fallback execution
         setTimeout(() => {
           if (!window.crossOriginIsolated) {
             btnStart.disabled = false;
-            btnStart.textContent = 'INITIALIZE SYSTEM (FALLBACK)';
-            logSabStatus.textContent = 'ISOLATION BYPASSED (EMULATION MODE)';
+            btnStart.textContent = 'INITIALIZE SYSTEM';
+            logSabStatus.textContent = 'RUNNING IN COMPATIBILITY MODE';
           }
         }, 1500);
       }
@@ -453,7 +469,6 @@
         }
       });
 
-      // Split file stitcher
       async function fetchPart(baseName, partIdx) {
         const pad4 = String(partIdx).padStart(4, '0');
         const paths = [
@@ -695,7 +710,11 @@
           if (!res.ok) throw new Error('Could not load hl2_launcher.js');
           let scriptText = await res.text();
 
-          // If not crossOriginIsolated, patch out SAB/pthread requirements to run cleanly
+          // Safely patch out unhandled DOM calls to setProgress
+          scriptText = scriptText.replace(/function setProgress\([^)]*\)\s*\{[\s\S]*?\}/, `function setProgress(val, total) {
+            if (window.setProgress) window.setProgress(val, total);
+          }`);
+
           if (!window.crossOriginIsolated) {
             scriptText = scriptText.replace(
               /function ___pthread_create_js\([^)]*\)\s*\{[\s\S]*?return \w+;?\s*\}/,
