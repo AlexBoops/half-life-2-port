@@ -357,7 +357,7 @@
 
       document.addEventListener('pointerlockchange', updateCursorState);
 
-      canvasElement.addEventListener('mousedown', (e) => {
+      canvasElement.addEventListener('mousedown', () => {
         canvasElement.focus();
         if (g_inMenu) return;
 
@@ -584,7 +584,7 @@
         },
         printErr: function(text) {
           console.error(text);
-          if (/crash|fatal error|exception|assertion failed/i.test(text)) {
+          if (/crash|fatal error|exception/i.test(text) && !/assertion failed/i.test(text)) {
             showCrash(text);
           }
         },
@@ -596,17 +596,22 @@
         },
         preRun: [
           function() {
-            const clearDepInterval = setInterval(() => {
-              if (typeof Module.removeRunDependency === 'function') {
+            // Guard removeRunDependency against invalid keys to prevent assert() crash
+            const origRemoveDep = Module.removeRunDependency;
+            if (typeof origRemoveDep === 'function') {
+              Module.removeRunDependency = function(id) {
+                if (typeof runDependencies !== 'undefined') {
+                  if (typeof runDependencies[id] === 'undefined' && (typeof dependenciesFulfilled === 'undefined' || !runDependencies)) {
+                    return;
+                  }
+                }
                 try {
-                  Module.removeRunDependency('load_game_data');
+                  origRemoveDep.call(Module, id);
                 } catch(e) {}
-                try {
-                  Module.removeRunDependency('loadDylibs');
-                } catch(e) {}
-              }
-            }, 1000);
+              };
+            }
 
+            // Watchdog to complete UI when maps mount
             const watchdog = setInterval(() => {
               if (typeof FS !== 'undefined') {
                 try {
@@ -621,7 +626,6 @@
                       canvasElement.focus();
                     }, 1200);
                     clearInterval(watchdog);
-                    clearInterval(clearDepInterval);
                   }
                 } catch(e) {}
               }
@@ -666,18 +670,36 @@
 
         btnStart.style.display = 'none';
         progressBox.style.display = 'block';
-        updateUI('STARTING', 'Triggering base game archives...');
+        updateUI('STARTING', 'Compiling and caching WebAssembly module...');
 
         if (typeof AL !== 'undefined' && AL.currentCtx && AL.currentCtx.audioCtx && AL.currentCtx.audioCtx.state === 'suspended') {
           AL.currentCtx.audioCtx.resume();
         }
 
         try {
-          // Preload base menu data chunk if needed
+          // Preload and compile index.wasm directly so main thread + all workers share it
+          const wasmRes = await origFetch('index.wasm');
+          if (!wasmRes.ok) throw new Error('Missing index.wasm');
+          const wasmBytes = await wasmRes.arrayBuffer();
+          const compiledModule = await WebAssembly.compile(wasmBytes);
+
+          // Supply compiled module directly to Emscripten
+          Module.wasmBinary = wasmBytes;
+          Module.instantiateWasm = function(imports, successCallback) {
+            WebAssembly.instantiate(compiledModule, imports).then((instance) => {
+              successCallback(instance, compiledModule);
+            }).catch((err) => {
+              showCrash('WASM Instantiate Failed: ' + err);
+            });
+            return {};
+          };
+
+          // Trigger background chunk assembly in parallel
           if (SPLIT_FILES['background01.data']) {
             assembleSplit({ baseName: 'background01.data', totalParts: SPLIT_FILES['background01.data'] }).catch(() => {});
           }
 
+          updateUI('LINKING', 'Executing runtime loader...');
           const script = document.createElement('script');
           script.type = 'text/javascript';
           script.src = 'index.js';
