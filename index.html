@@ -52,6 +52,7 @@
         align-items: center;
         justify-content: center;
         padding: 2rem;
+        transition: opacity 0.4s ease-out;
       }
 
       #launcher-ui::before {
@@ -67,7 +68,8 @@
       }
 
       #launcher-ui.hidden {
-        display: none !important;
+        opacity: 0;
+        pointer-events: none;
       }
 
       .terminal-frame {
@@ -347,6 +349,19 @@
       let g_engineInitialized = false;
       let g_inMenu = true;
 
+      function dismissLauncher() {
+        if (g_engineInitialized) return;
+        g_engineInitialized = true;
+        txtPct.textContent = '100%';
+        barFill.style.width = '100%';
+        updateUI('READY', 'Sector Ready');
+        launcherUi.classList.add('hidden');
+        setTimeout(() => {
+          launcherUi.style.display = 'none';
+        }, 400);
+        canvasElement.focus();
+      }
+
       function updateCursorState() {
         if (document.pointerLockElement === canvasElement) {
           canvasElement.style.cursor = 'none';
@@ -568,23 +583,25 @@
           if (text.includes('Map: d1_trainstation_01') || text.includes('Signon traffic') || text.includes('Setting up full update')) {
             g_inMenu = false;
           }
-          if (text.includes('Game initializing') || text.includes('Host_Init') || text.includes('Map: background01') || text.includes('Map: d1_trainstation_01')) {
-            txtPct.textContent = '100%';
-            barFill.style.width = '100%';
-            updateUI('READY', 'Sector Loaded');
-            setTimeout(() => {
-              launcherUi.classList.add('hidden');
-              g_engineInitialized = true;
-              canvasElement.focus();
-              if (!g_inMenu) {
-                try { canvasElement.requestPointerLock(); } catch(e) {}
-              }
-            }, 500);
+          // Dismiss launcher on device creation, shader/material load, or map startup
+          if (
+            text.includes('Cache materials') ||
+            text.includes('IDirect3DDevice9::Create') ||
+            text.includes('server.so loaded') ||
+            text.includes('client.dll') ||
+            text.includes('Host_Init') ||
+            text.includes('Map:')
+          ) {
+            dismissLauncher();
           }
         },
         printErr: function(text) {
           console.error(text);
-          if (/crash|fatal error|exception/i.test(text) && !/assertion failed/i.test(text)) {
+          // Dismiss launcher if engine is already processing shaders despite warnings
+          if (text.includes('Cache materials') || text.includes('IDirect3DDevice9::Create')) {
+            dismissLauncher();
+          }
+          if (/crash|fatal error|exception/i.test(text) && !/assertion failed|GL_INVALID/i.test(text)) {
             showCrash(text);
           }
         },
@@ -593,10 +610,11 @@
             Module._JSRequestResize(g_pendingResize[0], g_pendingResize[1]);
             window.g_pendingResize = null;
           }
+          // Fallback trigger once WASM and workers are live
+          setTimeout(dismissLauncher, 3000);
         },
         preRun: [
           function() {
-            // Guard removeRunDependency against invalid keys to prevent assert() crash
             const origRemoveDep = Module.removeRunDependency;
             if (typeof origRemoveDep === 'function') {
               Module.removeRunDependency = function(id) {
@@ -611,20 +629,13 @@
               };
             }
 
-            // Watchdog to complete UI when maps mount
+            // Continuous watchdog to ensure launcher dismisses once files mount
             const watchdog = setInterval(() => {
               if (typeof FS !== 'undefined') {
                 try {
                   const chk = FS.analyzePath('/hl2/maps/d1_trainstation_01.bsp');
                   if (chk && chk.exists) {
-                    txtPct.textContent = '100%';
-                    barFill.style.width = '100%';
-                    updateUI('READY', 'Point Insertion Ready.');
-                    setTimeout(() => {
-                      launcherUi.classList.add('hidden');
-                      g_engineInitialized = true;
-                      canvasElement.focus();
-                    }, 1200);
+                    dismissLauncher();
                     clearInterval(watchdog);
                   }
                 } catch(e) {}
@@ -677,13 +688,11 @@
         }
 
         try {
-          // Preload and compile index.wasm directly so main thread + all workers share it
           const wasmRes = await origFetch('index.wasm');
           if (!wasmRes.ok) throw new Error('Missing index.wasm');
           const wasmBytes = await wasmRes.arrayBuffer();
           const compiledModule = await WebAssembly.compile(wasmBytes);
 
-          // Supply compiled module directly to Emscripten
           Module.wasmBinary = wasmBytes;
           Module.instantiateWasm = function(imports, successCallback) {
             WebAssembly.instantiate(compiledModule, imports).then((instance) => {
@@ -694,7 +703,6 @@
             return {};
           };
 
-          // Trigger background chunk assembly in parallel
           if (SPLIT_FILES['background01.data']) {
             assembleSplit({ baseName: 'background01.data', totalParts: SPLIT_FILES['background01.data'] }).catch(() => {});
           }
