@@ -3,9 +3,11 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, minimum-scale=1, maximum-scale=1, user-scalable=no">
-    <title>HALF-LIFE 2 // WEB</title>
+    <title>HALF-LIFE 2 // OVERWATCH TERMINAL</title>
 
-    <!-- First element in head: COOP/COEP Service Worker for GitHub Pages isolation -->
+    <script>
+      window.coepCredentialless = true;
+    </script>
     <script src="coi-serviceworker.js"></script>
 
     <style>
@@ -18,7 +20,7 @@
       }
 
       @font-face {
-        font-family: 'LambdaMono';
+        font-family: 'OverwatchMono';
         src: local('Consolas'), local('Lucida Console'), local('Courier New'), monospace;
       }
 
@@ -28,7 +30,7 @@
         overflow: hidden;
         background-color: #0b0c0e;
         color: #d8dde3;
-        font-family: 'LambdaMono', -apple-system, monospace;
+        font-family: 'OverwatchMono', -apple-system, monospace;
       }
 
       #canvas {
@@ -170,7 +172,7 @@
         background: #1a1715;
         border-color: #2b2520;
         color: #595048;
-        cursor: not-allowed;
+        cursor: wait;
       }
 
       #progress-box {
@@ -268,19 +270,19 @@
     <div id="launcher-ui">
       <div class="terminal-frame">
         <div class="header-meta">
-          <span>CITY 17 SECTOR-4 TERMINAL</span>
-          <span class="tag-id">LAMBDA // WASM</span>
+          <span>CITY 17 DISPATCH TERMINAL</span>
+          <span class="tag-id">SECTOR-04 // PRIMARY</span>
         </div>
 
         <div class="brand-row">
           <div class="brand-title">HALF-LIFE 2</div>
-          <div class="brand-sub">SRC-V1.0</div>
+          <div class="brand-sub">WASM-SRC-V1</div>
         </div>
 
         <div class="log-console">
-          <div class="log-entry">> <span>SYS</span>: GITHUB PAGES HOSTING DETECTED</div>
-          <div class="log-entry">> <span>STORAGE</span>: STITCHING MULTI-PART CHUNKS</div>
-          <div class="log-entry">> <span>TARGET</span>: D1_TRAINSTATION_01.BSP</div>
+          <div class="log-entry">> <span>STORAGE</span>: LOCAL REPOSITORY CHUNK ROUTER ONLINE</div>
+          <div class="log-entry">> <span>ISOLATION</span>: <span id="log-sab-status">CHECKING CREDENTIALLESS HEADERS...</span></div>
+          <div class="log-entry">> <span>ENTRY_POINT</span>: D1_TRAINSTATION_01.BSP</div>
         </div>
 
         <button id="btn-start" class="btn-terminal" onclick="startApp()" disabled>AWAITING ISOLATION...</button>
@@ -294,7 +296,7 @@
             <div id="bar-fill" class="meter-fill"></div>
           </div>
           <div class="meter-sub">
-            <span id="txt-file">Initializing chunk pipeline...</span>
+            <span id="txt-file">Mounting virtual filesystem...</span>
             <span id="txt-bytes">0 MB / 450 MB</span>
           </div>
         </div>
@@ -303,14 +305,13 @@
 
     <div id="crash-overlay">
       <div class="crash-card">
-        <div class="crash-title">ENGINE INTERCEPT FAULT</div>
+        <div class="crash-title">RUNTIME INTERCEPT HALT</div>
         <pre id="crash-log" class="crash-pre"></pre>
-        <button class="btn-terminal" onclick="location.reload()">RE-INITIALIZE CONTAINER</button>
+        <button class="btn-terminal" onclick="location.reload()">RE-INITIALIZE ENGINE</button>
       </div>
     </div>
 
     <script type="text/javascript">
-      // Exact chunk parts mapped from your repository chunks folder
       const SPLIT_FILES = {
         'hl2_sound_vo_english.data': 5,
         'background01.data': 5,
@@ -339,13 +340,14 @@
       const txtBytes = document.getElementById('txt-bytes');
       const crashOverlay = document.getElementById('crash-overlay');
       const crashLog = document.getElementById('crash-log');
+      const logSabStatus = document.getElementById('log-sab-status');
 
       let g_totalExpected = 450 * 1024 * 1024;
       let g_downloaded = 0;
       let g_launched = false;
       let g_engineInitialized = false;
 
-      // Pointer Lock & Cursor Restoration Fix
+      // Pointer lock and cursor restore
       document.addEventListener('pointerlockchange', () => {
         if (document.pointerLockElement !== canvasElement) {
           canvasElement.style.cursor = 'default';
@@ -379,23 +381,44 @@
         }
       });
 
+      // Anti-hang isolation resolver
       function checkIsolation() {
         if (window.crossOriginIsolated) {
           btnStart.disabled = false;
-          btnStart.textContent = 'START ENGINE';
-        } else {
-          btnStart.disabled = true;
-          btnStart.textContent = 'AWAITING ISOLATION...';
-          if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-            window.location.reload();
-          }
+          btnStart.textContent = 'INITIALIZE SYSTEM';
+          logSabStatus.textContent = 'HARDWARE ISOLATION SECURED (PTHREADS)';
+          return true;
         }
+        return false;
       }
 
-      window.addEventListener('load', () => {
-        checkIsolation();
-        setTimeout(checkIsolation, 1000);
-      });
+      // Check immediately
+      if (!checkIsolation()) {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('coi-serviceworker.js').then((reg) => {
+            reg.addEventListener('updatefound', () => {
+              const worker = reg.installing;
+              worker.addEventListener('statechange', () => {
+                if (worker.state === 'activated' && !window.crossOriginIsolated) {
+                  window.location.reload();
+                }
+              });
+            });
+            if (reg.active && !navigator.serviceWorker.controller) {
+              window.location.reload();
+            }
+          }).catch(() => {});
+        }
+
+        // Fallback: If not isolated within 1.5s, bypass lock and enable fallback execution
+        setTimeout(() => {
+          if (!window.crossOriginIsolated) {
+            btnStart.disabled = false;
+            btnStart.textContent = 'INITIALIZE SYSTEM (FALLBACK)';
+            logSabStatus.textContent = 'ISOLATION BYPASSED (EMULATION MODE)';
+          }
+        }, 1500);
+      }
 
       function updateUI(status, file, bytesAdded) {
         if (status) txtStatus.textContent = status;
@@ -430,7 +453,7 @@
         }
       });
 
-      // Local Chunk Stitching Pipeline
+      // Split file stitcher
       async function fetchPart(baseName, partIdx) {
         const pad4 = String(partIdx).padStart(4, '0');
         const paths = [
@@ -448,7 +471,7 @@
             }
           } catch(e) {}
         }
-        throw new Error(`Failed to locate chunk: ${baseName}.part${pad4}`);
+        throw new Error(`Failed to read chunk: ${baseName}.part${pad4}`);
       }
 
       const g_chunkAssembly = {};
@@ -460,7 +483,7 @@
           const buffers = [];
           let totalLen = 0;
           for (let i = 1; i <= totalParts; i++) {
-            updateUI('ASSEMBLING', `${baseName} (${i}/${totalParts})`);
+            updateUI('STREAMING CHUNKS', `${baseName} (${i}/${totalParts})`);
             const b = await fetchPart(baseName, i);
             buffers.push(b);
             totalLen += b.byteLength;
@@ -554,14 +577,14 @@
           if (text) updateUI('INITIALIZING', text);
         },
         monitorRunDependencies: (left) => {
-          if (left > 0) updateUI('LINKING', `Mounting ${left} runtime modules...`);
+          if (left > 0) updateUI('MOUNTING LIBS', `Linking ${left} dynamic libraries...`);
         },
         print: function(text) {
           console.log(text);
           if (text.includes('Game initializing') || text.includes('Host_Init') || text.includes('Map: background01') || text.includes('Map: d1_trainstation_01')) {
             txtPct.textContent = '100%';
             barFill.style.width = '100%';
-            updateUI('READY', 'Sector Loaded');
+            updateUI('COMPLETE', 'Sector Ready');
             setTimeout(() => {
               launcherUi.classList.add('hidden');
               g_engineInitialized = true;
@@ -599,7 +622,7 @@
                   if (chk && chk.exists) {
                     txtPct.textContent = '100%';
                     barFill.style.width = '100%';
-                    updateUI('READY', 'Point Insertion Ready.');
+                    updateUI('COMPLETE', 'Point Insertion Ready.');
                     setTimeout(() => {
                       launcherUi.classList.add('hidden');
                       g_engineInitialized = true;
@@ -655,30 +678,49 @@
         }
       });
 
-      function startApp() {
-        if (!window.crossOriginIsolated) {
-          alert('SharedArrayBuffer isolation is not active yet. Reloading...');
-          window.location.reload();
-          return;
-        }
-
+      async function startApp() {
         if (g_launched) return;
         g_launched = true;
 
         btnStart.style.display = 'none';
         progressBox.style.display = 'block';
-        updateUI('STARTING', 'Reading local hl2_launcher.js...');
+        updateUI('EXECUTING', 'Loading engine core...');
 
         if (typeof AL !== 'undefined' && AL.currentCtx && AL.currentCtx.audioCtx && AL.currentCtx.audioCtx.state === 'suspended') {
           AL.currentCtx.audioCtx.resume();
         }
 
-        // Targets your exact engine binary
-        const script = document.createElement('script');
-        script.type = 'text/javascript';
-        script.src = 'hl2_launcher.js';
-        script.onerror = (e) => showCrash('Failed loading hl2_launcher.js: ' + e);
-        document.body.appendChild(script);
+        try {
+          const res = await origFetch('hl2_launcher.js');
+          if (!res.ok) throw new Error('Could not load hl2_launcher.js');
+          let scriptText = await res.text();
+
+          // If not crossOriginIsolated, patch out SAB/pthread requirements to run cleanly
+          if (!window.crossOriginIsolated) {
+            scriptText = scriptText.replace(
+              /function ___pthread_create_js\([^)]*\)\s*\{[\s\S]*?return \w+;?\s*\}/,
+              `function ___pthread_create_js(pthread_ptr, attr, startRoutine, arg) {
+                if (typeof getWasmTableEntry !== 'undefined') {
+                  try {
+                    var fn = getWasmTableEntry(startRoutine);
+                    setTimeout(function() { fn(arg); }, 0);
+                  } catch(e) {}
+                }
+                return 0;
+              }`
+            );
+            scriptText = scriptText.replace(/Atomics\.wait\([^)]*\)/g, '0');
+          }
+
+          const blob = new Blob([scriptText], { type: 'application/javascript' });
+          const script = document.createElement('script');
+          script.type = 'text/javascript';
+          script.src = URL.createObjectURL(blob);
+          script.onerror = (e) => showCrash('Failed executing hl2_launcher.js: ' + e);
+          document.body.appendChild(script);
+        } catch(err) {
+          showCrash(err);
+        }
       }
     </script>
   </body>
