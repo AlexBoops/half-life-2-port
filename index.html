@@ -3,11 +3,8 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, minimum-scale=1, maximum-scale=1, user-scalable=no">
-    <title>HALF-LIFE 2 // OVERWATCH TERMINAL</title>
+    <title>HALF-LIFE 2 // WEB</title>
 
-    <script>
-      window.coepCredentialless = true;
-    </script>
     <script src="coi-serviceworker.js"></script>
 
     <style>
@@ -20,7 +17,7 @@
       }
 
       @font-face {
-        font-family: 'OverwatchMono';
+        font-family: 'LambdaMono';
         src: local('Consolas'), local('Lucida Console'), local('Courier New'), monospace;
       }
 
@@ -30,7 +27,7 @@
         overflow: hidden;
         background-color: #0b0c0e;
         color: #d8dde3;
-        font-family: 'OverwatchMono', -apple-system, monospace;
+        font-family: 'LambdaMono', -apple-system, monospace;
       }
 
       #canvas {
@@ -172,7 +169,7 @@
         background: #1a1715;
         border-color: #2b2520;
         color: #595048;
-        cursor: wait;
+        cursor: not-allowed;
       }
 
       #progress-box {
@@ -262,42 +259,30 @@
         border: 1px solid #2b2520;
         margin-bottom: 1.2rem;
       }
-
-      /* Hidden dummy elements to satisfy native Emscripten setProgress hooks */
-      .emscripten-shims {
-        display: none !important;
-      }
     </style>
   </head>
   <body>
     <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
 
-    <!-- Hidden compatibility shim elements for default Emscripten DOM access -->
-    <div class="emscripten-shims">
-      <div id="status"></div>
-      <progress id="progress" max="100" value="0"></progress>
-      <div id="spinner"></div>
-    </div>
-
     <div id="launcher-ui">
       <div class="terminal-frame">
         <div class="header-meta">
-          <span>CITY 17 DISPATCH TERMINAL</span>
-          <span class="tag-id">SECTOR-04 // PRIMARY</span>
+          <span>CITY 17 SECTOR-4 TERMINAL</span>
+          <span class="tag-id">LAMBDA // WASM</span>
         </div>
 
         <div class="brand-row">
           <div class="brand-title">HALF-LIFE 2</div>
-          <div class="brand-sub">WASM-SRC-V1</div>
+          <div class="brand-sub">SRC-V1.0</div>
         </div>
 
         <div class="log-console">
-          <div class="log-entry">> <span>STORAGE</span>: LOCAL CHUNK ROUTER ACTIVE</div>
-          <div class="log-entry">> <span>ISOLATION</span>: <span id="log-sab-status">CHECKING CREDENTIALLESS HEADERS...</span></div>
-          <div class="log-entry">> <span>ENTRY_POINT</span>: D1_TRAINSTATION_01.BSP</div>
+          <div class="log-entry">> <span>MOUNT</span>: HL2 VPK REPOSITORIES DETECTED</div>
+          <div class="log-entry">> <span>CHUNK_SYS</span>: SUB-50MB SPLIT PIPELINE READY</div>
+          <div class="log-entry">> <span>POINT_INSERTION</span>: D1_TRAINSTATION_01.BSP</div>
         </div>
 
-        <button id="btn-start" class="btn-terminal" onclick="startApp()" disabled>AWAITING ISOLATION...</button>
+        <button id="btn-start" class="btn-terminal" onclick="startApp()">START ENGINE</button>
 
         <div id="progress-box">
           <div class="meter-labels">
@@ -308,8 +293,8 @@
             <div id="bar-fill" class="meter-fill"></div>
           </div>
           <div class="meter-sub">
-            <span id="txt-file">Mounting virtual filesystem...</span>
-            <span id="txt-bytes">0 MB / 450 MB</span>
+            <span id="txt-file">Initializing chunk pipeline...</span>
+            <span id="txt-bytes">0 MB / 420 MB</span>
           </div>
         </div>
       </div>
@@ -317,15 +302,19 @@
 
     <div id="crash-overlay">
       <div class="crash-card">
-        <div class="crash-title">RUNTIME INTERCEPT HALT</div>
+        <div class="crash-title">ENGINE INTERCEPT FAULT</div>
         <pre id="crash-log" class="crash-pre"></pre>
-        <button class="btn-terminal" onclick="location.reload()">RE-INITIALIZE ENGINE</button>
+        <button class="btn-terminal" onclick="location.reload()">RE-INITIALIZE CONTAINER</button>
       </div>
     </div>
 
     <script type="text/javascript">
+      // Emscripten legacy UI boilerplate shims to prevent DataLoader ReferenceErrors
+      window.spinnerElement = document.createElement('div');
+      window.statusElement = document.createElement('div');
+      window.progressElement = document.createElement('progress');
+
       const SPLIT_FILES = {
-        'hl2_sound_vo_english.data': 5,
         'background01.data': 5,
         'd1_canals_01.data': 2,
         'd1_canals_01a.data': 2,
@@ -352,21 +341,13 @@
       const txtBytes = document.getElementById('txt-bytes');
       const crashOverlay = document.getElementById('crash-overlay');
       const crashLog = document.getElementById('crash-log');
-      const logSabStatus = document.getElementById('log-sab-status');
 
-      let g_totalExpected = 450 * 1024 * 1024;
+      let g_totalExpected = 420 * 1024 * 1024;
       let g_downloaded = 0;
       let g_launched = false;
       let g_engineInitialized = false;
 
-      // Safe setProgress bridge so hl2_launcher never throws a null exception
-      window.setProgress = function(val, total) {
-        if (!total) total = 100;
-        const pct = Math.min(100, Math.round((val / total) * 100));
-        txtPct.textContent = `${pct}%`;
-        barFill.style.width = `${pct}%`;
-      };
-
+      // Pointer Lock & Escape Fix
       document.addEventListener('pointerlockchange', () => {
         if (document.pointerLockElement !== canvasElement) {
           canvasElement.style.cursor = 'default';
@@ -399,42 +380,6 @@
           document.body.style.cursor = 'default';
         }
       });
-
-      function checkIsolation() {
-        if (window.crossOriginIsolated) {
-          btnStart.disabled = false;
-          btnStart.textContent = 'INITIALIZE SYSTEM';
-          logSabStatus.textContent = 'HARDWARE ISOLATION ACTIVE';
-          return true;
-        }
-        return false;
-      }
-
-      if (!checkIsolation()) {
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.register('coi-serviceworker.js').then((reg) => {
-            reg.addEventListener('updatefound', () => {
-              const worker = reg.installing;
-              worker.addEventListener('statechange', () => {
-                if (worker.state === 'activated' && !window.crossOriginIsolated) {
-                  window.location.reload();
-                }
-              });
-            });
-            if (reg.active && !navigator.serviceWorker.controller) {
-              window.location.reload();
-            }
-          }).catch(() => {});
-        }
-
-        setTimeout(() => {
-          if (!window.crossOriginIsolated) {
-            btnStart.disabled = false;
-            btnStart.textContent = 'INITIALIZE SYSTEM';
-            logSabStatus.textContent = 'RUNNING IN COMPATIBILITY MODE';
-          }
-        }, 1500);
-      }
 
       function updateUI(status, file, bytesAdded) {
         if (status) txtStatus.textContent = status;
@@ -469,6 +414,7 @@
         }
       });
 
+      // Local relative chunk assembly
       async function fetchPart(baseName, partIdx) {
         const pad4 = String(partIdx).padStart(4, '0');
         const paths = [
@@ -486,7 +432,7 @@
             }
           } catch(e) {}
         }
-        throw new Error(`Failed to read chunk: ${baseName}.part${pad4}`);
+        throw new Error(`Failed to locate chunk: ${baseName}.part${pad4}`);
       }
 
       const g_chunkAssembly = {};
@@ -498,7 +444,7 @@
           const buffers = [];
           let totalLen = 0;
           for (let i = 1; i <= totalParts; i++) {
-            updateUI('STREAMING CHUNKS', `${baseName} (${i}/${totalParts})`);
+            updateUI('ASSEMBLING', `${baseName} (${i}/${totalParts})`);
             const b = await fetchPart(baseName, i);
             buffers.push(b);
             totalLen += b.byteLength;
@@ -549,15 +495,27 @@
       window.XMLHttpRequest = function() {
         const xhr = new OrigXHR();
         let targetUrl = '';
+        let isPost = false;
 
         const origOpen = xhr.open;
         xhr.open = function(method, url, ...rest) {
           targetUrl = url;
+          if (method.toUpperCase() === 'POST') isPost = true;
           return origOpen.call(this, method, url, ...rest);
         };
 
         const origSend = xhr.send;
         xhr.send = function(body) {
+          if (isPost && targetUrl.includes('save_console_log')) {
+            setTimeout(() => {
+              Object.defineProperty(xhr, 'status', { get: () => 200 });
+              Object.defineProperty(xhr, 'statusText', { get: () => 'OK' });
+              Object.defineProperty(xhr, 'readyState', { get: () => 4 });
+              if (typeof xhr.onload === 'function') xhr.onload(new ProgressEvent('load'));
+            }, 0);
+            return;
+          }
+
           const split = getSplitTarget(targetUrl);
           if (split) {
             assembleSplit(split).then(buffer => {
@@ -584,22 +542,51 @@
         return xhr;
       };
 
+      // Thread mock for environments without SharedArrayBuffer
+      window.Worker = function(scriptURL, options) {
+        const mockWorker = {
+          onmessage: null,
+          onerror: null,
+          postMessage: function(msg) {
+            if (!msg) return;
+            if (msg.cmd === 'load' || msg.cmd === 'run') {
+              setTimeout(() => {
+                if (typeof mockWorker.onmessage === 'function') {
+                  mockWorker.onmessage({ data: { cmd: 'loaded' } });
+                  mockWorker.onmessage({ data: { cmd: 'ready' } });
+                }
+              }, 0);
+            }
+          },
+          terminate: function() {},
+          addEventListener: function(event, fn) {
+            if (event === 'message') mockWorker.onmessage = fn;
+            if (event === 'error') mockWorker.onerror = fn;
+          },
+          removeEventListener: function() {}
+        };
+        return mockWorker;
+      };
+
       var Module = {
         canvas: canvasElement,
         locateFile: (p) => p,
         totalDependencies: 0,
+        spinner: window.spinnerElement,
+        statusElement: window.statusElement,
+        progressElement: window.progressElement,
         setStatus: (text) => {
           if (text) updateUI('INITIALIZING', text);
         },
         monitorRunDependencies: (left) => {
-          if (left > 0) updateUI('MOUNTING LIBS', `Linking ${left} dynamic libraries...`);
+          if (left > 0) updateUI('LINKING', `Mounting ${left} runtime modules...`);
         },
         print: function(text) {
           console.log(text);
           if (text.includes('Game initializing') || text.includes('Host_Init') || text.includes('Map: background01') || text.includes('Map: d1_trainstation_01')) {
             txtPct.textContent = '100%';
             barFill.style.width = '100%';
-            updateUI('COMPLETE', 'Sector Ready');
+            updateUI('READY', 'Sector Loaded');
             setTimeout(() => {
               launcherUi.classList.add('hidden');
               g_engineInitialized = true;
@@ -637,7 +624,7 @@
                   if (chk && chk.exists) {
                     txtPct.textContent = '100%';
                     barFill.style.width = '100%';
-                    updateUI('COMPLETE', 'Point Insertion Ready.');
+                    updateUI('READY', 'Point Insertion Ready.');
                     setTimeout(() => {
                       launcherUi.classList.add('hidden');
                       g_engineInitialized = true;
@@ -699,43 +686,37 @@
 
         btnStart.style.display = 'none';
         progressBox.style.display = 'block';
-        updateUI('EXECUTING', 'Loading engine core...');
+        updateUI('STARTING', 'Reading local index.js...');
 
         if (typeof AL !== 'undefined' && AL.currentCtx && AL.currentCtx.audioCtx && AL.currentCtx.audioCtx.state === 'suspended') {
           AL.currentCtx.audioCtx.resume();
         }
 
         try {
-          const res = await origFetch('hl2_launcher.js');
-          if (!res.ok) throw new Error('Could not load hl2_launcher.js');
+          const res = await origFetch('index.js');
+          if (!res.ok) throw new Error('Missing index.js in local directory');
           let scriptText = await res.text();
 
-          // Safely patch out unhandled DOM calls to setProgress
-          scriptText = scriptText.replace(/function setProgress\([^)]*\)\s*\{[\s\S]*?\}/, `function setProgress(val, total) {
-            if (window.setProgress) window.setProgress(val, total);
-          }`);
-
-          if (!window.crossOriginIsolated) {
-            scriptText = scriptText.replace(
-              /function ___pthread_create_js\([^)]*\)\s*\{[\s\S]*?return \w+;?\s*\}/,
-              `function ___pthread_create_js(pthread_ptr, attr, startRoutine, arg) {
-                if (typeof getWasmTableEntry !== 'undefined') {
-                  try {
-                    var fn = getWasmTableEntry(startRoutine);
-                    setTimeout(function() { fn(arg); }, 0);
-                  } catch(e) {}
-                }
-                return 0;
-              }`
-            );
-            scriptText = scriptText.replace(/Atomics\.wait\([^)]*\)/g, '0');
-          }
+          // Patch pthread_create to execute routine on the main queue
+          scriptText = scriptText.replace(
+            /function ___pthread_create_js\([^)]*\)\s*\{[\s\S]*?return \w+;?\s*\}/,
+            `function ___pthread_create_js(pthread_ptr, attr, startRoutine, arg) {
+              if (typeof getWasmTableEntry !== 'undefined') {
+                try {
+                  var fn = getWasmTableEntry(startRoutine);
+                  setTimeout(function() { fn(arg); }, 0);
+                } catch(e) {}
+              }
+              return 0;
+            }`
+          );
+          scriptText = scriptText.replace(/Atomics\.wait\([^)]*\)/g, '0');
 
           const blob = new Blob([scriptText], { type: 'application/javascript' });
           const script = document.createElement('script');
           script.type = 'text/javascript';
           script.src = URL.createObjectURL(blob);
-          script.onerror = (e) => showCrash('Failed executing hl2_launcher.js: ' + e);
+          script.onerror = (e) => showCrash('Execution error on index.js: ' + e);
           document.body.appendChild(script);
         } catch(err) {
           showCrash(err);
