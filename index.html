@@ -310,27 +310,40 @@
     </div>
 
     <script type="text/javascript">
-      // Global pointer lock interceptor to prevent browser rate-limit crashes
+      // Fix snappy camera/cursor: clamp erratic movement delta spikes over 200px
       (function() {
-        const originalRequestPointerLock = Element.prototype.requestPointerLock;
-        let lastLockTime = 0;
+        const origAddEventListener = EventTarget.prototype.addEventListener;
+        EventTarget.prototype.addEventListener = function(type, listener, options) {
+          if (type === 'mousemove' && typeof listener === 'function') {
+            const wrappedListener = function(event) {
+              if (document.pointerLockElement) {
+                if (Math.abs(event.movementX) > 200 || Math.abs(event.movementY) > 200) {
+                  Object.defineProperty(event, 'movementX', { value: 0 });
+                  Object.defineProperty(event, 'movementY', { value: 0 });
+                }
+              }
+              return listener.apply(this, arguments);
+            };
+            return origAddEventListener.call(this, type, wrappedListener, options);
+          }
+          return origAddEventListener.call(this, type, listener, options);
+        };
+      })();
 
+      // Suppress rate-limiting on pointer lock requests from SDL
+      (function() {
+        const origLock = Element.prototype.requestPointerLock;
+        let lastAttempt = 0;
         Element.prototype.requestPointerLock = function() {
           const now = performance.now();
-          if (document.pointerLockElement === this) {
+          if (document.pointerLockElement === this || (now - lastAttempt < 1000)) {
             return Promise.resolve();
           }
-          if (now - lastLockTime < 1000) {
-            return Promise.resolve();
-          }
-          lastLockTime = now;
+          lastAttempt = now;
           try {
-            const ret = originalRequestPointerLock.apply(this, arguments);
-            if (ret && typeof ret.catch === 'function') {
-              return ret.catch(() => {});
-            }
-            return ret || Promise.resolve();
-          } catch (e) {
+            const res = origLock.apply(this, arguments);
+            return (res && typeof res.catch === 'function') ? res.catch(() => {}) : Promise.resolve();
+          } catch(e) {
             return Promise.resolve();
           }
         };
@@ -380,6 +393,17 @@
       let g_downloaded = 0;
       let g_launched = false;
       let g_engineInitialized = false;
+
+      function resumeAudioStack() {
+        if (typeof AL !== 'undefined' && AL.currentCtx && AL.currentCtx.audioCtx) {
+          if (AL.currentCtx.audioCtx.state === 'suspended') {
+            AL.currentCtx.audioCtx.resume().catch(() => {});
+          }
+        }
+      }
+
+      window.addEventListener('click', resumeAudioStack);
+      window.addEventListener('keydown', resumeAudioStack);
 
       function dismissLauncher() {
         if (g_engineInitialized) return;
@@ -686,9 +710,7 @@
         progressBox.style.display = 'block';
         updateUI('STARTING', 'Compiling and caching WebAssembly module...');
 
-        if (typeof AL !== 'undefined' && AL.currentCtx && AL.currentCtx.audioCtx && AL.currentCtx.audioCtx.state === 'suspended') {
-          AL.currentCtx.audioCtx.resume();
-        }
+        resumeAudioStack();
 
         try {
           const wasmRes = await origFetch('index.wasm');
