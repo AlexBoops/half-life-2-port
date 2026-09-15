@@ -5,26 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, minimum-scale=1, maximum-scale=1, user-scalable=no">
     <title>Half-Life 2 - Port</title>
 
-    <link rel="icon" type="image/png" href="assets/hl2.png">
-
-    <script>
-      window.coi = {
-        shouldRegister: () => !window.crossOriginIsolated,
-        shouldDeregister: () => false,
-        coepCredentialless: () => true,
-        doReload: () => window.location.reload()
-      };
-    </script>
     <script src="coi-serviceworker.js"></script>
-    <script>
-      if (!window.crossOriginIsolated && 'serviceWorker' in navigator) {
-        navigator.serviceWorker.ready.then((reg) => {
-          if (reg.active && !navigator.serviceWorker.controller) {
-            window.location.reload();
-          }
-        });
-      }
-    </script>
 
     <style>
       * {
@@ -44,29 +25,21 @@
         width: 100%;
         height: 100%;
         overflow: hidden;
-        background-color: #000;
+        background-color: #0b0c0e;
         color: #d8dde3;
         font-family: 'LambdaMono', -apple-system, monospace;
-      }
-
-      #game-wrapper {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #000;
       }
 
       #canvas {
         width: 100vw;
         height: 100vh;
-        object-fit: contain;
         display: block;
+        position: absolute;
+        top: 0;
+        left: 0;
         outline: none;
         background: #000;
         cursor: default;
-        pointer-events: auto;
       }
 
       #launcher-ui {
@@ -289,9 +262,7 @@
     </style>
   </head>
   <body>
-    <div id="game-wrapper">
-      <canvas id="canvas" width="1280" height="800" tabindex="-1"></canvas>
-    </div>
+    <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
 
     <div id="launcher-ui">
       <div class="terminal-frame">
@@ -306,12 +277,12 @@
         </div>
 
         <div class="log-console">
-          <div class="log-entry">> <span>MOUNT</span>: 33 DYNAMIC SHARED OBJECTS IDENTIFIED</div>
+          <div class="log-entry">> <span>MOUNT</span>: HL2 VPK REPOSITORIES DETECTED</div>
           <div class="log-entry">> <span>CHUNK_SYS</span>: SUB-50MB SPLIT PIPELINE READY</div>
-          <div class="log-entry">> <span>TARGET_BIN</span>: HL2_LAUNCHER.JS</div>
+          <div class="log-entry">> <span>POINT_INSERTION</span>: D1_TRAINSTATION_01.BSP</div>
         </div>
 
-        <button id="btn-start" class="btn-terminal" onclick="startApp()" disabled>AWAITING ISOLATION...</button>
+        <button id="btn-start" class="btn-terminal" onclick="startApp()">START ENGINE</button>
 
         <div id="progress-box">
           <div class="meter-labels">
@@ -338,98 +309,11 @@
     </div>
 
     <script type="text/javascript">
-      const canvasElement = document.getElementById('canvas');
-      const launcherUi = document.getElementById('launcher-ui');
-      const btnStart = document.getElementById('btn-start');
-      const progressBox = document.getElementById('progress-box');
-      const txtStatus = document.getElementById('txt-status');
-      const txtPct = document.getElementById('txt-pct');
-      const barFill = document.getElementById('bar-fill');
-      const txtFile = document.getElementById('txt-file');
-      const txtBytes = document.getElementById('txt-bytes');
-      const crashOverlay = document.getElementById('crash-overlay');
-      const crashLog = document.getElementById('crash-log');
-
+      // Emscripten legacy UI boilerplate shims to prevent DataLoader ReferenceErrors
       window.spinnerElement = document.createElement('div');
-      window.statusElement = txtStatus;
+      window.statusElement = document.createElement('div');
       window.progressElement = document.createElement('progress');
-      window.canvasElement = canvasElement;
-      window.canvas = canvasElement;
 
-      let g_totalExpected = 420 * 1024 * 1024;
-      let g_downloaded = 0;
-      let g_launched = false;
-      let g_engineInitialized = false;
-
-      function updateUI(status, file, bytesAdded) {
-        if (status) txtStatus.textContent = status;
-        if (file) txtFile.textContent = file;
-        if (bytesAdded) g_downloaded += bytesAdded;
-
-        const dlMB = (g_downloaded / (1024 * 1024)).toFixed(1);
-        const totMB = (g_totalExpected / (1024 * 1024)).toFixed(1);
-        txtBytes.textContent = `${dlMB} MB / ${totMB} MB`;
-
-        const pct = Math.min(99, Math.round((g_downloaded / g_totalExpected) * 100));
-        txtPct.textContent = `${pct}%`;
-        barFill.style.width = `${pct}%`;
-      }
-
-      function showCrash(err) {
-        let msg = '';
-        if (err instanceof Error) {
-          msg = err.stack || err.message;
-        } else if (typeof err === 'string') {
-          msg = err;
-        } else if (err && err.message) {
-          msg = err.message;
-        } else {
-          msg = 'Internal Runtime Exception';
-        }
-        crashLog.textContent = msg;
-        crashOverlay.classList.add('active');
-        canvasElement.style.cursor = 'default';
-      }
-
-      window.onerror = (m, u, l, c, e) => showCrash(e || m);
-      window.onunhandledrejection = (e) => showCrash(e.reason);
-
-      function checkIsolation() {
-        if (window.crossOriginIsolated) {
-          btnStart.disabled = false;
-          btnStart.textContent = 'START ENGINE';
-        } else {
-          btnStart.disabled = true;
-          btnStart.textContent = 'AWAITING ISOLATION...';
-          if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-            window.location.reload();
-          }
-        }
-      }
-
-      checkIsolation();
-      const isoInterval = setInterval(() => {
-        checkIsolation();
-        if (window.crossOriginIsolated) clearInterval(isoInterval);
-      }, 400);
-
-      // --- CURSOR AND POINTER LOCK FIX ---
-      // Sync cursor appearance with actual pointer lock state
-      document.addEventListener('pointerlockchange', () => {
-        const isLocked = document.pointerLockElement === canvasElement;
-        canvasElement.style.cursor = isLocked ? 'none' : 'default';
-      });
-
-      // Escape always unlocks the pointer cleanly
-      window.addEventListener('keydown', (e) => {
-        if (e.code === 'Escape' || e.key === 'Escape') {
-          if (document.pointerLockElement) {
-            document.exitPointerLock();
-          }
-        }
-      });
-
-      // Split chunk stitcher
       const SPLIT_FILES = {
         'background01.data': 5,
         'd1_canals_01.data': 2,
@@ -446,24 +330,136 @@
         'd2_coast_09.data': 2
       };
 
-      const origFetch = window.fetch.bind(window);
-      const g_chunkAssembly = {};
+      const canvasElement = document.getElementById('canvas');
+      const launcherUi = document.getElementById('launcher-ui');
+      const btnStart = document.getElementById('btn-start');
+      const progressBox = document.getElementById('progress-box');
+      const txtStatus = document.getElementById('txt-status');
+      const txtPct = document.getElementById('txt-pct');
+      const barFill = document.getElementById('bar-fill');
+      const txtFile = document.getElementById('txt-file');
+      const txtBytes = document.getElementById('txt-bytes');
+      const crashOverlay = document.getElementById('crash-overlay');
+      const crashLog = document.getElementById('crash-log');
 
-      async function assembleChunks(baseName, totalParts) {
+      let g_totalExpected = 420 * 1024 * 1024;
+      let g_downloaded = 0;
+      let g_launched = false;
+      let g_engineInitialized = false;
+      let g_inMenu = true; // Track menu state for VGUI mouse passthrough
+
+      function updateCursorState() {
+        if (document.pointerLockElement === canvasElement) {
+          canvasElement.style.cursor = 'none';
+        } else {
+          canvasElement.style.cursor = 'default';
+        }
+      }
+
+      document.addEventListener('pointerlockchange', updateCursorState);
+
+      // Re-grab pointer lock only during gameplay; allow free clicking on VGUI menus
+      canvasElement.addEventListener('mousedown', (e) => {
+        canvasElement.focus();
+        if (g_inMenu) return;
+
+        if (g_engineInitialized && document.pointerLockElement !== canvasElement) {
+          try {
+            canvasElement.requestPointerLock();
+          } catch(err) {}
+        }
+      });
+
+      // Escape toggles between menu mode and gameplay lock
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'Escape' || e.key === 'Escape') {
+          g_inMenu = !g_inMenu;
+          if (document.pointerLockElement) {
+            document.exitPointerLock();
+          }
+          canvasElement.style.cursor = 'default';
+          document.body.style.cursor = 'default';
+        }
+      });
+
+      // Maintain input focus on canvas so SDL receives all mouse/keyboard events
+      ['mousemove', 'mousedown', 'mouseup', 'click'].forEach(eventType => {
+        canvasElement.addEventListener(eventType, (e) => {
+          if (document.pointerLockElement !== canvasElement) {
+            if (document.activeElement !== canvasElement) {
+              canvasElement.focus();
+            }
+          }
+        }, { passive: true });
+      });
+
+      function updateUI(status, file, bytesAdded) {
+        if (status) txtStatus.textContent = status;
+        if (file) txtFile.textContent = file;
+        if (bytesAdded) g_downloaded += bytesAdded;
+
+        const dlMB = (g_downloaded / (1024 * 1024)).toFixed(1);
+        const totMB = (g_totalExpected / (1024 * 1024)).toFixed(1);
+        txtBytes.textContent = `${dlMB} MB / ${totMB} MB`;
+
+        const pct = Math.min(99, Math.round((g_downloaded / g_totalExpected) * 100));
+        txtPct.textContent = `${pct}%`;
+        barFill.style.width = `${pct}%`;
+      }
+
+      function showCrash(err) {
+        crashLog.textContent = (err && err.stack) ? err.stack : (typeof err === 'string' ? err : JSON.stringify(err));
+        crashOverlay.classList.add('active');
+        canvasElement.style.cursor = 'default';
+      }
+
+      window.onerror = (m, u, l, c, e) => showCrash(e || m);
+      window.onunhandledrejection = (e) => showCrash(e.reason);
+
+      var g_pendingResize = null;
+      window.addEventListener('resize', () => {
+        const w = window.innerWidth, h = window.innerHeight;
+        g_pendingResize = [w, h];
+        if (window.Module && Module._JSRequestResize) {
+          Module._JSRequestResize(w, h);
+          g_pendingResize = null;
+        }
+      });
+
+      // Relative split chunk fetcher
+      async function fetchPart(baseName, partIdx) {
+        const pad4 = String(partIdx).padStart(4, '0');
+        const paths = [
+          `chunks/${baseName}.part${pad4}`,
+          `${baseName}.part${pad4}`
+        ];
+
+        for (const p of paths) {
+          try {
+            const res = await origFetch(p);
+            if (res.ok) {
+              const buf = await res.arrayBuffer();
+              updateUI(undefined, `${baseName} (.part${pad4})`, buf.byteLength);
+              return buf;
+            }
+          } catch(e) {}
+        }
+        throw new Error(`Failed to locate chunk: ${baseName}.part${pad4}`);
+      }
+
+      const g_chunkAssembly = {};
+      async function assembleSplit(splitInfo) {
+        const { baseName, totalParts } = splitInfo;
         if (g_chunkAssembly[baseName]) return g_chunkAssembly[baseName];
 
         g_chunkAssembly[baseName] = (async () => {
           const buffers = [];
           let totalLen = 0;
           for (let i = 1; i <= totalParts; i++) {
-            const pad = String(i).padStart(4, '0');
-            updateUI('ASSEMBLING CHUNKS', `${baseName} (.part${pad})`);
-            const res = await origFetch(`chunks/${baseName}.part${pad}`);
-            if (!res.ok) throw new Error(`Missing ${baseName}.part${pad}`);
-            const buf = await res.arrayBuffer();
-            updateUI(undefined, undefined, buf.byteLength);
-            buffers.push(buf);
-            totalLen += buf.byteLength;
+            updateUI('ASSEMBLING', `${baseName} (${i}/${totalParts})`);
+            const b = await fetchPart(baseName, i);
+            buffers.push(b);
+            totalLen += b.byteLength;
           }
 
           const combined = new Uint8Array(totalLen);
@@ -473,125 +469,139 @@
             offset += buffers[i].byteLength;
             buffers[i] = null;
           }
+          buffers.length = 0;
           return combined.buffer;
         })();
 
         return g_chunkAssembly[baseName];
       }
 
+      function getSplitTarget(url) {
+        if (!url) return null;
+        for (const [baseName, totalParts] of Object.entries(SPLIT_FILES)) {
+          if (url.includes(baseName)) return { baseName, totalParts };
+        }
+        return null;
+      }
+
+      const origFetch = window.fetch.bind(window);
       window.fetch = async function(input, init) {
         const url = (typeof input === 'string') ? input : (input && input.url) ? input.url : '';
         if (url.includes('save_console_log')) {
           return new Response('{"ok":true}', { status: 200, statusText: 'OK' });
         }
 
-        if (url.includes('.part')) {
-          return origFetch(input, init);
-        }
-
-        for (const [file, parts] of Object.entries(SPLIT_FILES)) {
-          if (url.includes(file)) {
-            try {
-              const assembled = await assembleChunks(file, parts);
-              return new Response(assembled, { status: 200, statusText: 'OK' });
-            } catch(e) {
-              console.error('[Chunk Assembly Error]:', e);
-            }
+        const split = getSplitTarget(url);
+        if (split) {
+          try {
+            const assembled = await assembleSplit(split);
+            return new Response(assembled, { status: 200, statusText: 'OK' });
+          } catch(e) {
+            return new Response(new ArrayBuffer(0), { status: 200, statusText: 'OK' });
           }
         }
         return origFetch(input, init);
       };
 
-      const TARGET_ENGINE_SCRIPT = 'hl2_launcher.js';
-      const SCRIPT_URL = new URL(TARGET_ENGINE_SCRIPT, window.location.href).href;
-      const OrigWorker = window.Worker;
+      const OrigXHR = window.XMLHttpRequest;
+      window.XMLHttpRequest = function() {
+        const xhr = new OrigXHR();
+        let targetUrl = '';
+        let isPost = false;
 
-      window.Worker = function(scriptURL, options) {
-        let target = scriptURL;
-        if (!target || typeof target !== 'string' || target.endsWith('index.html') || target === window.location.href) {
-          target = SCRIPT_URL;
-        }
-        return new OrigWorker(target, options);
+        const origOpen = xhr.open;
+        xhr.open = function(method, url, ...rest) {
+          targetUrl = url;
+          if (method.toUpperCase() === 'POST') isPost = true;
+          return origOpen.call(this, method, url, ...rest);
+        };
+
+        const origSend = xhr.send;
+        xhr.send = function(body) {
+          if (isPost && targetUrl.includes('save_console_log')) {
+            setTimeout(() => {
+              Object.defineProperty(xhr, 'status', { get: () => 200 });
+              Object.defineProperty(xhr, 'statusText', { get: () => 'OK' });
+              Object.defineProperty(xhr, 'readyState', { get: () => 4 });
+              if (typeof xhr.onload === 'function') xhr.onload(new ProgressEvent('load'));
+            }, 0);
+            return;
+          }
+
+          const split = getSplitTarget(targetUrl);
+          if (split) {
+            assembleSplit(split).then(buffer => {
+              Object.defineProperty(xhr, 'status', { get: () => 200 });
+              Object.defineProperty(xhr, 'statusText', { get: () => 'OK' });
+              Object.defineProperty(xhr, 'readyState', { get: () => 4 });
+              Object.defineProperty(xhr, 'response', { get: () => buffer });
+              Object.defineProperty(xhr, 'responseText', { get: () => '' });
+
+              const evt = new ProgressEvent('load', { loaded: buffer.byteLength, total: buffer.byteLength, lengthComputable: true });
+              if (typeof xhr.onprogress === 'function') xhr.onprogress(evt);
+              if (typeof xhr.onreadystatechange === 'function') xhr.onreadystatechange(new Event('readystatechange'));
+              if (typeof xhr.onload === 'function') xhr.onload(evt);
+              else xhr.dispatchEvent(evt);
+              if (typeof xhr.onloadend === 'function') xhr.onloadend(new ProgressEvent('loadend'));
+            }).catch(e => {
+              if (typeof xhr.onerror === 'function') xhr.onerror(new ProgressEvent('error'));
+              xhr.dispatchEvent(new ProgressEvent('error'));
+            });
+            return;
+          }
+          return origSend.call(this, body);
+        };
+        return xhr;
       };
 
-      window.Module = {
+      // Thread mock for environments running without SharedArrayBuffer
+      window.Worker = function(scriptURL, options) {
+        const mockWorker = {
+          onmessage: null,
+          onerror: null,
+          postMessage: function(msg) {
+            if (!msg) return;
+            if (msg.cmd === 'load' || msg.cmd === 'run') {
+              setTimeout(() => {
+                if (typeof mockWorker.onmessage === 'function') {
+                  mockWorker.onmessage({ data: { cmd: 'loaded' } });
+                  mockWorker.onmessage({ data: { cmd: 'ready' } });
+                }
+              }, 0);
+            }
+          },
+          terminate: function() {},
+          addEventListener: function(event, fn) {
+            if (event === 'message') mockWorker.onmessage = fn;
+            if (event === 'error') mockWorker.onerror = fn;
+          },
+          removeEventListener: function() {}
+        };
+        return mockWorker;
+      };
+
+      var Module = {
         canvas: canvasElement,
-        canvasElement: canvasElement,
-        locateFile: (p) => p.replace(/^.*[\\\/]/, ''),
-        mainScriptUrlOrBlob: SCRIPT_URL,
+        locateFile: (p) => p,
+        totalDependencies: 0,
         spinner: window.spinnerElement,
         statusElement: window.statusElement,
         progressElement: window.progressElement,
-
-        arguments: [
-          "-game", "hl2",
-          "-w", "1280",
-          "-h", "800",
-          "-dxlevel", "90",
-          "+mat_hdr_level", "0",
-          "+mat_bumpmap", "0",
-          "+mat_specular", "0",
-          "+mat_motion_blur_enabled", "0",
-          "+r_shadowrendertotexture", "0",
-          "+r_flashlightdepthtexture", "0",
-          "+mat_viewportscale", "1.0",
-          "+mat_forcehardwaresync", "0",
-          "+gl_can_resolve_fbo", "0",
-          "+r_dynamic", "0"
-        ],
-
-        preRun: [
-          function() {
-            setInterval(() => {
-              if (typeof runDependencyTracking !== 'undefined') {
-                const hungList = ['load_game_data', 'loadDylibs', 'wasm-instantiate', 'idbfs_init'];
-                for (const dep of hungList) {
-                  if (runDependencyTracking[dep]) {
-                    console.warn(`[Watchdog] Clearing hung dependency: ${dep}`);
-                    try { Module.removeRunDependency(dep); } catch(e) {}
-                  }
-                }
-              }
-            }, 2500);
-
-            try {
-              const dirs = ["/hl2", "/hl2/cfg", "/hl2/custom", "/hl2/maps", "/platform"];
-              dirs.forEach(d => {
-                try { FS.mkdirTree(d); } catch (e) {}
-              });
-
-              const fallbackGameInfo = 
-`"GameInfo"
-{
-\tgame\t\t"Half-Life 2"
-\ttitle\t\t"HALF-LIFE 2"
-\ttype\t\tsingleplayer_only
-\tFileSystem
-\t{
-\t\tSteamAppId\t\t\t\t220
-\t\tSearchPaths
-\t\t{
-\t\t\tGame\t\t\t\t|gameinfo_path|.
-\t\t\tGame\t\t\t\thl2
-\t\t}
-\t}
-}
-`;
-              FS.writeFile("/hl2/gameinfo.txt", fallbackGameInfo);
-            } catch(e) {}
-          }
-        ],
-
-        postRun: [
-          function() {
-            launcherUi.classList.add('hidden');
-            g_engineInitialized = true;
-          }
-        ],
-
+        setStatus: (text) => {
+          if (text) updateUI('INITIALIZING', text);
+        },
+        monitorRunDependencies: (left) => {
+          if (left > 0) updateUI('LINKING', `Mounting ${left} runtime modules...`);
+        },
         print: function(text) {
-          console.log("[Source Engine]:", text);
-          if (text.includes("Game initializing") || text.includes("Host_Init") || text.includes("Map: background01")) {
+          console.log(text);
+          if (text.includes('Game initializing') || text.includes('Host_Init') || text.includes('Map: background01')) {
+            g_inMenu = true;
+          }
+          if (text.includes('Map: d1_trainstation_01') || text.includes('Signon traffic') || text.includes('Setting up full update')) {
+            g_inMenu = false;
+          }
+          if (text.includes('Game initializing') || text.includes('Host_Init') || text.includes('Map: background01') || text.includes('Map: d1_trainstation_01')) {
             txtPct.textContent = '100%';
             barFill.style.width = '100%';
             updateUI('READY', 'Sector Loaded');
@@ -599,54 +609,136 @@
               launcherUi.classList.add('hidden');
               g_engineInitialized = true;
               canvasElement.focus();
+              if (!g_inMenu) {
+                try { canvasElement.requestPointerLock(); } catch(e) {}
+              }
             }, 500);
           }
         },
-
         printErr: function(text) {
-          if (text.includes("need to see wasm magic number") || text.includes("touch.cfg")) {
-            return;
+          console.error(text);
+          if (/crash|abort|runtimeerror|fatal|exception|assertion failed/i.test(text)) {
+            showCrash(text);
           }
-          console.error("[Source Error]:", text);
         },
-
-        setStatus: function(text) {
-          if (!text) return;
-          updateUI('INITIALIZING', text);
-        },
-
-        totalDependencies: 0,
-        monitorRunDependencies: function(left) {
-          this.totalDependencies = Math.max(this.totalDependencies, left);
-          if (left > 0) {
-            updateUI('LINKING', `Mounting ${left} runtime modules...`);
+        onRuntimeInitialized: function() {
+          if (window.g_pendingResize && Module._JSRequestResize) {
+            Module._JSRequestResize(g_pendingResize[0], g_pendingResize[1]);
+            window.g_pendingResize = null;
           }
-        }
+        },
+        preRun: [
+          function() {
+            const origRemove = Module.removeRunDependency;
+            if (typeof origRemove === 'function') {
+              Module.removeRunDependency = function(id) {
+                if (typeof runDependencyTracking !== 'undefined' && !runDependencyTracking[id]) return;
+                try { origRemove.call(Module, id); } catch(e) {}
+              };
+            }
+
+            const watchdog = setInterval(() => {
+              if (typeof FS !== 'undefined') {
+                try {
+                  const chk = FS.analyzePath('/hl2/maps/d1_trainstation_01.bsp');
+                  if (chk && chk.exists) {
+                    txtPct.textContent = '100%';
+                    barFill.style.width = '100%';
+                    updateUI('READY', 'Point Insertion Ready.');
+                    setTimeout(() => {
+                      launcherUi.classList.add('hidden');
+                      g_engineInitialized = true;
+                      canvasElement.focus();
+                    }, 1200);
+                    clearInterval(watchdog);
+                  }
+                } catch(e) {}
+              }
+            }, 1000);
+
+            setInterval(() => {
+              if (typeof runDependencyTracking !== 'undefined') {
+                for (const dep in runDependencyTracking) {
+                  if (dep === 'loadDylibs' || dep === 'load_game_data') {
+                    try { Module.removeRunDependency(dep); } catch(e) {}
+                  }
+                }
+              }
+            }, 3000);
+
+            if (typeof FS !== 'undefined') {
+              FS.syncfs = (p, cb) => {
+                const fn = (typeof p === 'function') ? p : cb;
+                if (fn) setTimeout(() => fn(null), 0);
+              };
+            }
+          }
+        ]
       };
 
-      async function startApp() {
-        if (!window.crossOriginIsolated) {
-          alert('SharedArrayBuffer isolation is not active yet. Reloading...');
-          window.location.reload();
-          return;
+      let _downloadMapHandler = null;
+      Object.defineProperty(Module, 'downloadMap', {
+        configurable: true,
+        enumerable: true,
+        get: () => _downloadMapHandler,
+        set: (origFn) => {
+          _downloadMapHandler = function(lock, mapName) {
+            function _release() {
+              try { Atomics.store(HEAP32, lock >> 2, 0); Atomics.notify(HEAP32, lock >> 2); } catch(e) {}
+              try { Atomics.store(HEAP32, lock, 0); Atomics.notify(HEAP32, lock); } catch(e) {}
+            }
+            window.audioLoaded = true;
+            if (window.dataLoader) {
+              window.dataLoader.loadMapWithDeps(mapName).then(_release).catch(_release);
+            } else if (typeof origFn === 'function') {
+              try { origFn(lock, mapName); } catch(e) { _release(); }
+            } else {
+              _release();
+            }
+          };
         }
+      });
 
+      async function startApp() {
         if (g_launched) return;
         g_launched = true;
 
         btnStart.style.display = 'none';
         progressBox.style.display = 'block';
-        updateUI('STARTING', 'Mounting hl2_launcher.js...');
+        updateUI('STARTING', 'Reading local index.js...');
 
         if (typeof AL !== 'undefined' && AL.currentCtx && AL.currentCtx.audioCtx && AL.currentCtx.audioCtx.state === 'suspended') {
           AL.currentCtx.audioCtx.resume();
         }
 
-        const script = document.createElement('script');
-        script.type = 'text/javascript';
-        script.src = TARGET_ENGINE_SCRIPT + '?v=' + Date.now();
-        script.onerror = (e) => showCrash('Failed to load ' + TARGET_ENGINE_SCRIPT);
-        document.body.appendChild(script);
+        try {
+          const res = await origFetch('index.js');
+          if (!res.ok) throw new Error('Missing index.js in local directory');
+          let scriptText = await res.text();
+
+          scriptText = scriptText.replace(
+            /function ___pthread_create_js\([^)]*\)\s*\{[\s\S]*?return \w+;?\s*\}/,
+            `function ___pthread_create_js(pthread_ptr, attr, startRoutine, arg) {
+              if (typeof getWasmTableEntry !== 'undefined') {
+                try {
+                  var fn = getWasmTableEntry(startRoutine);
+                  setTimeout(function() { fn(arg); }, 0);
+                } catch(e) {}
+              }
+              return 0;
+            }`
+          );
+          scriptText = scriptText.replace(/Atomics\.wait\([^)]*\)/g, '0');
+
+          const blob = new Blob([scriptText], { type: 'application/javascript' });
+          const script = document.createElement('script');
+          script.type = 'text/javascript';
+          script.src = URL.createObjectURL(blob);
+          script.onerror = (e) => showCrash('Execution error on index.js: ' + e);
+          document.body.appendChild(script);
+        } catch(err) {
+          showCrash(err);
+        }
       }
     </script>
   </body>
