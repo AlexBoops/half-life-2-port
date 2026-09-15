@@ -309,7 +309,6 @@
     </div>
 
     <script type="text/javascript">
-      // Emscripten legacy UI boilerplate shims to prevent DataLoader ReferenceErrors
       window.spinnerElement = document.createElement('div');
       window.statusElement = document.createElement('div');
       window.progressElement = document.createElement('progress');
@@ -346,7 +345,7 @@
       let g_downloaded = 0;
       let g_launched = false;
       let g_engineInitialized = false;
-      let g_inMenu = true; // Track menu state for VGUI mouse passthrough
+      let g_inMenu = true;
 
       function updateCursorState() {
         if (document.pointerLockElement === canvasElement) {
@@ -358,7 +357,6 @@
 
       document.addEventListener('pointerlockchange', updateCursorState);
 
-      // Re-grab pointer lock only during gameplay; allow free clicking on VGUI menus
       canvasElement.addEventListener('mousedown', (e) => {
         canvasElement.focus();
         if (g_inMenu) return;
@@ -370,7 +368,6 @@
         }
       });
 
-      // Escape toggles between menu mode and gameplay lock
       window.addEventListener('keydown', (e) => {
         if (e.code === 'Escape' || e.key === 'Escape') {
           g_inMenu = !g_inMenu;
@@ -382,13 +379,10 @@
         }
       });
 
-      // Maintain input focus on canvas so SDL receives all mouse/keyboard events
       ['mousemove', 'mousedown', 'mouseup', 'click'].forEach(eventType => {
-        canvasElement.addEventListener(eventType, (e) => {
-          if (document.pointerLockElement !== canvasElement) {
-            if (document.activeElement !== canvasElement) {
-              canvasElement.focus();
-            }
+        canvasElement.addEventListener(eventType, () => {
+          if (document.pointerLockElement !== canvasElement && document.activeElement !== canvasElement) {
+            canvasElement.focus();
           }
         }, { passive: true });
       });
@@ -426,7 +420,6 @@
         }
       });
 
-      // Relative split chunk fetcher
       async function fetchPart(baseName, partIdx) {
         const pad4 = String(partIdx).padStart(4, '0');
         const paths = [
@@ -543,7 +536,7 @@
               if (typeof xhr.onload === 'function') xhr.onload(evt);
               else xhr.dispatchEvent(evt);
               if (typeof xhr.onloadend === 'function') xhr.onloadend(new ProgressEvent('loadend'));
-            }).catch(e => {
+            }).catch(() => {
               if (typeof xhr.onerror === 'function') xhr.onerror(new ProgressEvent('error'));
               xhr.dispatchEvent(new ProgressEvent('error'));
             });
@@ -552,32 +545,6 @@
           return origSend.call(this, body);
         };
         return xhr;
-      };
-
-      // Thread mock for environments running without SharedArrayBuffer
-      window.Worker = function(scriptURL, options) {
-        const mockWorker = {
-          onmessage: null,
-          onerror: null,
-          postMessage: function(msg) {
-            if (!msg) return;
-            if (msg.cmd === 'load' || msg.cmd === 'run') {
-              setTimeout(() => {
-                if (typeof mockWorker.onmessage === 'function') {
-                  mockWorker.onmessage({ data: { cmd: 'loaded' } });
-                  mockWorker.onmessage({ data: { cmd: 'ready' } });
-                }
-              }, 0);
-            }
-          },
-          terminate: function() {},
-          addEventListener: function(event, fn) {
-            if (event === 'message') mockWorker.onmessage = fn;
-            if (event === 'error') mockWorker.onerror = fn;
-          },
-          removeEventListener: function() {}
-        };
-        return mockWorker;
       };
 
       var Module = {
@@ -617,7 +584,7 @@
         },
         printErr: function(text) {
           console.error(text);
-          if (/crash|abort|runtimeerror|fatal|exception|assertion failed/i.test(text)) {
+          if (/crash|fatal error|exception|assertion failed/i.test(text)) {
             showCrash(text);
           }
         },
@@ -629,13 +596,16 @@
         },
         preRun: [
           function() {
-            const origRemove = Module.removeRunDependency;
-            if (typeof origRemove === 'function') {
-              Module.removeRunDependency = function(id) {
-                if (typeof runDependencyTracking !== 'undefined' && !runDependencyTracking[id]) return;
-                try { origRemove.call(Module, id); } catch(e) {}
-              };
-            }
+            const clearDepInterval = setInterval(() => {
+              if (typeof Module.removeRunDependency === 'function') {
+                try {
+                  Module.removeRunDependency('load_game_data');
+                } catch(e) {}
+                try {
+                  Module.removeRunDependency('loadDylibs');
+                } catch(e) {}
+              }
+            }, 1000);
 
             const watchdog = setInterval(() => {
               if (typeof FS !== 'undefined') {
@@ -651,20 +621,11 @@
                       canvasElement.focus();
                     }, 1200);
                     clearInterval(watchdog);
+                    clearInterval(clearDepInterval);
                   }
                 } catch(e) {}
               }
             }, 1000);
-
-            setInterval(() => {
-              if (typeof runDependencyTracking !== 'undefined') {
-                for (const dep in runDependencyTracking) {
-                  if (dep === 'loadDylibs' || dep === 'load_game_data') {
-                    try { Module.removeRunDependency(dep); } catch(e) {}
-                  }
-                }
-              }
-            }, 3000);
 
             if (typeof FS !== 'undefined') {
               FS.syncfs = (p, cb) => {
@@ -705,36 +666,22 @@
 
         btnStart.style.display = 'none';
         progressBox.style.display = 'block';
-        updateUI('STARTING', 'Reading local index.js...');
+        updateUI('STARTING', 'Triggering base game archives...');
 
         if (typeof AL !== 'undefined' && AL.currentCtx && AL.currentCtx.audioCtx && AL.currentCtx.audioCtx.state === 'suspended') {
           AL.currentCtx.audioCtx.resume();
         }
 
         try {
-          const res = await origFetch('index.js');
-          if (!res.ok) throw new Error('Missing index.js in local directory');
-          let scriptText = await res.text();
+          // Preload base menu data chunk if needed
+          if (SPLIT_FILES['background01.data']) {
+            assembleSplit({ baseName: 'background01.data', totalParts: SPLIT_FILES['background01.data'] }).catch(() => {});
+          }
 
-          scriptText = scriptText.replace(
-            /function ___pthread_create_js\([^)]*\)\s*\{[\s\S]*?return \w+;?\s*\}/,
-            `function ___pthread_create_js(pthread_ptr, attr, startRoutine, arg) {
-              if (typeof getWasmTableEntry !== 'undefined') {
-                try {
-                  var fn = getWasmTableEntry(startRoutine);
-                  setTimeout(function() { fn(arg); }, 0);
-                } catch(e) {}
-              }
-              return 0;
-            }`
-          );
-          scriptText = scriptText.replace(/Atomics\.wait\([^)]*\)/g, '0');
-
-          const blob = new Blob([scriptText], { type: 'application/javascript' });
           const script = document.createElement('script');
           script.type = 'text/javascript';
-          script.src = URL.createObjectURL(blob);
-          script.onerror = (e) => showCrash('Execution error on index.js: ' + e);
+          script.src = 'index.js';
+          script.onerror = (e) => showCrash('Failed to load index.js: ' + e);
           document.body.appendChild(script);
         } catch(err) {
           showCrash(err);
