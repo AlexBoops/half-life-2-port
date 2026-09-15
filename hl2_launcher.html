@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, minimum-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Half-Life 2</title>
+
+  <!-- Enables SharedArrayBuffer on GitHub Pages without server-side config -->
+  <script src="coi-serviceworker.js"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #0b0c10;
+      overflow: hidden;
+      color: #c5c6c7;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    #canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      border: 0;
+      outline: none;
+    }
+    #status-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at center, #1f2833 0%, #0b0c10 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+      padding: 24px;
+      box-sizing: border-box;
+      text-align: center;
+    }
+    .hud-card {
+      background: rgba(15, 20, 28, 0.9);
+      border: 1px solid rgba(255, 153, 0, 0.4);
+      box-shadow: 0 0 30px rgba(255, 153, 0, 0.2), inset 0 0 15px rgba(0, 0, 0, 0.6);
+      border-radius: 12px;
+      padding: 30px 40px;
+      width: 90%;
+      max-width: 520px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .hud-title {
+      color: #ff9900;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      text-shadow: 0 0 10px rgba(255, 153, 0, 0.6);
+    }
+    .hud-sub {
+      color: #8892b0;
+      font-size: 13px;
+      margin-bottom: 20px;
+      letter-spacing: 1px;
+    }
+    #status {
+      font-size: 13px;
+      color: #66fcf1;
+      font-family: 'Courier New', Courier, monospace;
+      margin-bottom: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      width: 100%;
+    }
+    #progress-wrapper {
+      width: 100%;
+      margin-bottom: 12px;
+    }
+    progress#progress {
+      width: 100%;
+      height: 14px;
+      accent-color: #ff9900;
+      border-radius: 7px;
+      overflow: hidden;
+    }
+    #percent-text {
+      font-size: 14px;
+      color: #ff9900;
+      font-family: 'Courier New', Courier, monospace;
+      font-weight: bold;
+    }
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="status-overlay">
+    <div class="hud-card">
+      <div class="hud-title">City 17 System Loader</div>
+      <div class="hud-sub">Source Engine WebAssembly Core</div>
+      <div id="status">Initializing engine components...</div>
+      <div id="progress-wrapper">
+        <progress id="progress" value="0" max="100"></progress>
+      </div>
+      <div id="percent-text">0%</div>
+    </div>
+  </div>
+
+  <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+  <div id="spinner" style="display:none"></div>
+
+  <script>
+    // Globals expected by hl2_launcher.js
+    const canvasElement = document.getElementById('canvas');
+    const spinnerElement = document.getElementById('spinner');
+    const statusElement = document.getElementById('status');
+    const progressElement = document.getElementById('progress');
+
+    window.canvasElement = canvasElement;
+    window.spinnerElement = spinnerElement;
+    window.statusElement = statusElement;
+    window.progressElement = progressElement;
+    window.canvas = canvasElement;
+
+    const statusOverlay = document.getElementById('status-overlay');
+    const percentText = document.getElementById('percent-text');
+
+    function updateProgressUI(message, fraction) {
+      if (message && statusElement) statusElement.textContent = message;
+      if (typeof fraction === 'number' && !isNaN(fraction)) {
+        const val = Math.min(Math.max(fraction * 100, 0), 100);
+        if (progressElement) progressElement.value = val;
+        if (percentText) percentText.textContent = Math.round(val) + '%';
+      }
+    }
+
+    function hideStatus() {
+      if (statusOverlay) statusOverlay.classList.add('hidden');
+    }
+
+    window.Module = {
+      canvas: canvasElement,
+      canvasElement: canvasElement,
+      spinnerElement: spinnerElement,
+      statusElement: statusElement,
+      progressElement: progressElement,
+      setStatus: function(text) {
+        if (!text) {
+          updateProgressUI('All assets ready. Starting engine...', 1);
+          setTimeout(hideStatus, 600);
+          return;
+        }
+        const match = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+        if (match) {
+          const item = match[1].trim();
+          const current = parseFloat(match[2]);
+          const total = parseFloat(match[4]);
+          updateProgressUI(item, total > 0 ? current / total : 0);
+        } else {
+          updateProgressUI(text);
+        }
+      },
+      totalDependencies: 0,
+      monitorRunDependencies: function(left) {
+        this.totalDependencies = Math.max(this.totalDependencies, left);
+        if (left) {
+          const current = this.totalDependencies - left;
+          const ratio = this.totalDependencies > 0 ? current / this.totalDependencies : 0;
+          updateProgressUI(`Mounting packages (${current}/${this.totalDependencies})...`, ratio);
+        } else {
+          updateProgressUI('Starting Half-Life 2...', 0.99);
+        }
+      },
+      onAbort: function(reason) {
+        updateProgressUI('Engine halted: ' + (reason || 'Unknown error'));
+        if (statusElement) statusElement.style.color = '#ff4d4d';
+        if (percentText) percentText.textContent = 'ERR';
+      }
+    };
+  </script>
+
+  <!-- Load launcher after globals and Module are configured -->
+  <script async src="hl2_launcher.js"></script>
+</body>
+</html>
